@@ -27,8 +27,26 @@ export default function Billing({ cashier, onLogout }) {
     return () => clearInterval(t)
   }, [])
 
-  // Create new transaction on mount
-  useEffect(() => { createNewBill() }, [])
+  // Restore active transaction or create new one on mount
+  useEffect(() => {
+    const restoreOrCreate = async () => {
+      try {
+        // Try to restore an existing active transaction for this cashier
+        const res = await fetch(`${API}/transactions/active/${cashier.id}`)
+        const data = await res.json()
+        if (data && data.id) {
+          setTxn(data)
+          setItems(data.items || [])
+          setCustomer(data.customer || null)
+          setCoupon(data.coupon || null)
+          return
+        }
+      } catch {}
+      // No active transaction found — create a new one
+      createNewBill()
+    }
+    restoreOrCreate()
+  }, [])
 
   // Focus scan input
   useEffect(() => {
@@ -130,7 +148,14 @@ export default function Billing({ cashier, onLogout }) {
       }
       setTxn(data)
       setItems(data.items || [])
-      notify(`✅ ${product.name} added`)
+
+      // Show stock warnings if any
+      if (data.warnings && data.warnings.length > 0) {
+        data.warnings.forEach(w => notify(w, 'warning'))
+      } else {
+        notify(`✅ ${product.name} added`)
+      }
+
       // Beep
       try { new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=').play() } catch {}
     } catch (err) {
@@ -147,6 +172,10 @@ export default function Billing({ cashier, onLogout }) {
         body: JSON.stringify({ quantity: newQty })
       })
       const data = await res.json()
+      if (!res.ok) {
+        notify(data.error || 'Failed to update', 'error')
+        return
+      }
       setTxn(data)
       setItems(data.items)
     } catch { notify('Failed to update', 'error') }
@@ -219,24 +248,18 @@ export default function Billing({ cashier, onLogout }) {
     } catch {}
   }
 
-  const linkCustomer = async (phone) => {
+  const linkCustomer = async (customerData) => {
+    // Link to transaction
     try {
-      const res = await fetch(`${API}/customers/search?phone=${phone}`)
-      const data = await res.json()
-      if (!res.ok) {
-        notify(data.error, 'error')
-        return
-      }
-      // Link to transaction
       await fetch(`${API}/transactions/${txn.id}/customer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer_id: data.id })
+        body: JSON.stringify({ customer_id: customerData.id })
       })
-      setCustomer(data)
+      setCustomer(customerData)
       setShowCustomer(false)
-      notify(`👤 ${data.name} linked`)
-    } catch { notify('Customer not found', 'error') }
+      notify(`👤 ${customerData.name} linked`)
+    } catch { notify('Failed to link customer', 'error') }
   }
 
   const processPayment = async (method, tendered) => {
@@ -334,7 +357,7 @@ export default function Billing({ cashier, onLogout }) {
                     >
                       <div>
                         <div className="sr-name">{p.name}</div>
-                        <div className="sr-meta">{p.category} · {p.barcode}</div>
+                        <div className="sr-meta">{p.category} · {p.barcode} · Stock: {p.stock_qty}</div>
                       </div>
                       <div className="sr-price">{formatPrice(p.selling_price)}</div>
                     </div>
@@ -371,7 +394,12 @@ export default function Billing({ cashier, onLogout }) {
                       <td style={{ color: 'var(--text-muted)' }}>{i + 1}</td>
                       <td>
                         <div className="item-name">{item.product_name}</div>
-                        <div className="item-meta">{item.sku} · {item.hsn_code}</div>
+                        <div className="item-meta">
+                          {item.sku} · {item.hsn_code}
+                          {item.stock_qty !== undefined && item.stock_qty <= 10 && (
+                            <span className="low-stock-badge"> · ⚠️ {item.stock_qty} left</span>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <div className="qty-controls">
@@ -657,34 +685,149 @@ function SplitPaymentModal({ total, onConfirm, onClose }) {
 }
 
 /* ═══════════════════════════
-   CUSTOMER MODAL
+   CUSTOMER MODAL (with registration)
    ═══════════════════════════ */
 function CustomerModal({ onLink, onClose }) {
   const [phone, setPhone] = useState('')
+  const [searchResult, setSearchResult] = useState(null)
+  const [notFound, setNotFound] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newEmail, setNewEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const searchCustomer = async () => {
+    if (phone.length < 10) return
+    setLoading(true)
+    setNotFound(false)
+    setSearchResult(null)
+    try {
+      const res = await fetch(`${API}/customers/search?phone=${phone}`)
+      if (res.ok) {
+        const data = await res.json()
+        setSearchResult(data)
+      } else {
+        setNotFound(true)
+      }
+    } catch {
+      setNotFound(true)
+    }
+    setLoading(false)
+  }
+
+  const createAndLink = async () => {
+    if (!newName.trim() || phone.length < 10) return
+    setLoading(true)
+    try {
+      const res = await fetch(`${API}/customers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim(), phone, email: newEmail.trim() || undefined })
+      })
+      const data = await res.json()
+      if (res.ok || res.status === 201) {
+        onLink(data)
+      } else {
+        // If phone already exists, try to fetch and link
+        if (data.customer_id) {
+          const fetchRes = await fetch(`${API}/customers/search?phone=${phone}`)
+          if (fetchRes.ok) {
+            const existing = await fetchRes.json()
+            onLink(existing)
+          }
+        }
+      }
+    } catch {}
+    setLoading(false)
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <h2>👤 Link Customer <button className="modal-close" onClick={onClose}>✕</button></h2>
+
+        {/* Phone search */}
         <div className="form-group">
           <label>Phone Number</label>
-          <input
-            type="tel"
-            placeholder="Enter customer phone number"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            autoFocus
-            maxLength={10}
-          />
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              type="tel"
+              placeholder="Enter 10-digit phone number"
+              value={phone}
+              onChange={e => { setPhone(e.target.value); setNotFound(false); setSearchResult(null) }}
+              autoFocus
+              maxLength={10}
+              style={{ flex: 1 }}
+            />
+            <button
+              className="modal-btn primary"
+              onClick={searchCustomer}
+              disabled={phone.length < 10 || loading}
+              style={{ whiteSpace: 'nowrap', padding: '8px 16px' }}
+            >
+              🔍 Search
+            </button>
+          </div>
         </div>
-        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+
+        {/* Found customer */}
+        {searchResult && (
+          <div className="customer-display" style={{ margin: '12px 0' }}>
+            <div className="cust-header">
+              <span className="cust-name">👤 {searchResult.name}</span>
+              <span className={`cust-tier tier-${searchResult.membership_tier}`}>{searchResult.membership_tier}</span>
+            </div>
+            <div className="cust-points">Loyalty Points: <span>{searchResult.loyalty_points}</span></div>
+            <button
+              className="modal-btn primary"
+              onClick={() => onLink(searchResult)}
+              style={{ marginTop: '8px', width: '100%' }}
+            >
+              🔗 Link {searchResult.name}
+            </button>
+          </div>
+        )}
+
+        {/* Not found — register new */}
+        {notFound && (
+          <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '16px', margin: '12px 0', background: 'var(--bg-subtle)' }}>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+              No customer found. Register a new one:
+            </p>
+            <div className="form-group" style={{ marginBottom: '8px' }}>
+              <label>Name *</label>
+              <input
+                type="text"
+                placeholder="Customer name"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: '12px' }}>
+              <label>Email (optional)</label>
+              <input
+                type="email"
+                placeholder="customer@email.com"
+                value={newEmail}
+                onChange={e => setNewEmail(e.target.value)}
+              />
+            </div>
+            <button
+              className="modal-btn primary"
+              onClick={createAndLink}
+              disabled={!newName.trim() || loading}
+              style={{ width: '100%' }}
+            >
+              ✅ Register & Link
+            </button>
+          </div>
+        )}
+
+        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '12px' }}>
           Demo phones: 9876543210, 9876543211, 9876543212
         </p>
+
         <div className="modal-actions">
           <button className="modal-btn secondary" onClick={onClose}>Cancel</button>
-          <button className="modal-btn primary" onClick={() => onLink(phone)} disabled={phone.length < 10}>
-            🔗 Link Customer
-          </button>
         </div>
       </div>
     </div>

@@ -13,6 +13,32 @@ router.get('/search', (req, res) => {
   res.json(customer);
 });
 
+// POST /api/customers — Create new customer (at checkout)
+router.post('/', (req, res) => {
+  const { name, phone, email } = req.body;
+
+  if (!name || !phone) {
+    return res.status(400).json({ error: 'Name and phone number are required' });
+  }
+
+  if (!/^\d{10}$/.test(phone)) {
+    return res.status(400).json({ error: 'Phone must be a 10-digit number' });
+  }
+
+  // Check uniqueness
+  const existing = db.prepare('SELECT id FROM customers WHERE phone = ?').get(phone);
+  if (existing) {
+    return res.status(409).json({ error: 'Customer with this phone already exists', customer_id: existing.id });
+  }
+
+  const result = db.prepare(
+    'INSERT INTO customers (name, phone, email, loyalty_points, membership_tier) VALUES (?, ?, ?, 0, ?)'
+  ).run(name, phone, email || null, 'Silver');
+
+  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
+  res.status(201).json(customer);
+});
+
 // POST /api/customers/:id/redeem — Redeem loyalty points
 router.post('/:id/redeem', (req, res) => {
   const { points, txn_id } = req.body;

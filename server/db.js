@@ -103,6 +103,11 @@ db.exec(`
     FOREIGN KEY (txn_id) REFERENCES transactions(id)
   );
 
+  CREATE TABLE IF NOT EXISTS bill_sequence (
+    date TEXT PRIMARY KEY,
+    seq INTEGER DEFAULT 0
+  );
+
   CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
   CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
   CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
