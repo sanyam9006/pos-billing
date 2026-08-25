@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { authMiddleware } = require('./utils/auth');
+const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +27,14 @@ app.use('/api/customers', authMiddleware, require('./routes/customers'));
 app.use('/api/refunds', authMiddleware, require('./routes/refunds'));
 app.use('/api/reports', authMiddleware, require('./routes/reports'));
 
-app.listen(PORT, () => {
-  console.log(`🚀 POS Server running on http://localhost:${PORT}`);
-});
+// Centralized error handling (must be last)
+app.use(errorHandler);
+
+// Start server only when run directly (not when imported for tests)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 POS Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
