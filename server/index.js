@@ -23,6 +23,7 @@ app.use('/api/products', authMiddleware, require('./routes/products'));
 app.use('/api/transactions', authMiddleware, require('./routes/transactions'));
 app.use('/api/payments', authMiddleware, require('./routes/payments'));
 app.use('/api/customers', authMiddleware, require('./routes/customers'));
+app.use('/api/refunds', authMiddleware, require('./routes/refunds'));
 
 app.listen(PORT, () => {
   console.log(`🚀 POS Server running on http://localhost:${PORT}`);

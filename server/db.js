@@ -108,6 +108,20 @@ db.exec(`
     seq INTEGER DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS refunds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_txn_id INTEGER NOT NULL,
+    cashier_id INTEGER NOT NULL,
+    reason TEXT,
+    refund_amount REAL NOT NULL,
+    refund_method TEXT NOT NULL CHECK(refund_method IN ('cash', 'card', 'upi', 'store_credit')),
+    items_json TEXT,
+    status TEXT DEFAULT 'completed',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (original_txn_id) REFERENCES transactions(id),
+    FOREIGN KEY (cashier_id) REFERENCES cashiers(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
   CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
   CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
