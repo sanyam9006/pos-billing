@@ -1,24 +1,28 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const { authMiddleware } = require('./utils/auth');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
 
-// Routes
+// Public routes (no auth required)
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/products', require('./routes/products'));
-app.use('/api/transactions', require('./routes/transactions'));
-app.use('/api/payments', require('./routes/payments'));
-app.use('/api/customers', require('./routes/customers'));
 
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Protected routes (auth required)
+app.use('/api/products', authMiddleware, require('./routes/products'));
+app.use('/api/transactions', authMiddleware, require('./routes/transactions'));
+app.use('/api/payments', authMiddleware, require('./routes/payments'));
+app.use('/api/customers', authMiddleware, require('./routes/customers'));
 
 app.listen(PORT, () => {
   console.log(`🚀 POS Server running on http://localhost:${PORT}`);

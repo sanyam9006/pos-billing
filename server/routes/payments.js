@@ -124,10 +124,10 @@ router.get('/receipt/:txnId', (req, res) => {
 
   res.json({
     store: {
-      name: 'SUPERMART RETAIL PVT LTD',
-      address: '123, MG Road, Bengaluru - 560001',
-      gstin: '29AABCS1234A1Z5',
-      phone: '080-12345678'
+      name: process.env.STORE_NAME || 'SUPERMART RETAIL PVT LTD',
+      address: process.env.STORE_ADDRESS || '123, MG Road, Bengaluru - 560001',
+      gstin: process.env.STORE_GSTIN || '29AABCS1234A1Z5',
+      phone: process.env.STORE_PHONE || '080-12345678'
     },
     bill_number: txn.bill_number,
     date: txn.completed_at || txn.created_at,

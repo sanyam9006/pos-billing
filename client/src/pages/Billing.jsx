@@ -2,6 +2,31 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 
 const API = '/api'
 
+// Helper: fetch with auth — reads JWT from localStorage, auto-logout on 401
+async function authFetch(url, options = {}) {
+  let token = ''
+  try {
+    const session = JSON.parse(localStorage.getItem('pos_cashier_session') || '{}')
+    token = session.token || ''
+  } catch {}
+
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+      ...(options.headers || {})
+    }
+  })
+
+  if (res.status === 401) {
+    localStorage.removeItem('pos_cashier_session')
+    window.location.reload()
+    throw new Error('Session expired')
+  }
+  return res
+}
+
 export default function Billing({ cashier, onLogout }) {
   const [txn, setTxn] = useState(null)
   const [items, setItems] = useState([])
@@ -32,7 +57,7 @@ export default function Billing({ cashier, onLogout }) {
     const restoreOrCreate = async () => {
       try {
         // Try to restore an existing active transaction for this cashier
-        const res = await fetch(`${API}/transactions/active/${cashier.id}`)
+        const res = await authFetch(`${API}/transactions/active/${cashier.id}`)
         const data = await res.json()
         if (data && data.id) {
           setTxn(data)
@@ -62,7 +87,7 @@ export default function Billing({ cashier, onLogout }) {
 
   const createNewBill = async () => {
     try {
-      const res = await fetch(`${API}/transactions`, {
+      const res = await authFetch(`${API}/transactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ cashier_id: cashier.id })
@@ -82,7 +107,7 @@ export default function Billing({ cashier, onLogout }) {
 
     // Try barcode scan first
     try {
-      let res = await fetch(`${API}/products/scan/${input}`)
+      let res = await authFetch(`${API}/products/scan/${input}`)
       if (res.ok) {
         const product = await res.json()
         await addItemToCart(product)
@@ -92,7 +117,7 @@ export default function Billing({ cashier, onLogout }) {
       }
 
       // Try search
-      res = await fetch(`${API}/products/search?q=${encodeURIComponent(input)}`)
+      res = await authFetch(`${API}/products/search?q=${encodeURIComponent(input)}`)
       if (res.ok) {
         const results = await res.json()
         if (results.length === 1) {
@@ -112,7 +137,7 @@ export default function Billing({ cashier, onLogout }) {
     setScanInput(val)
     if (val.length >= 2) {
       try {
-        const res = await fetch(`${API}/products/search?q=${encodeURIComponent(val)}`)
+        const res = await authFetch(`${API}/products/search?q=${encodeURIComponent(val)}`)
         if (res.ok) {
           const results = await res.json()
           setSearchResults(results)
@@ -127,7 +152,7 @@ export default function Billing({ cashier, onLogout }) {
     try {
       let currentTxn = txn
       if (!currentTxn) {
-        const createRes = await fetch(`${API}/transactions`, {
+        const createRes = await authFetch(`${API}/transactions`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cashier_id: cashier?.id || 1 })
@@ -136,7 +161,7 @@ export default function Billing({ cashier, onLogout }) {
         setTxn(currentTxn)
       }
 
-      const res = await fetch(`${API}/transactions/${currentTxn.id}/items`, {
+      const res = await authFetch(`${API}/transactions/${currentTxn.id}/items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product_id: product.id, quantity: 1 })
@@ -166,7 +191,7 @@ export default function Billing({ cashier, onLogout }) {
 
   const updateQty = async (itemId, newQty) => {
     try {
-      const res = await fetch(`${API}/transactions/${txn.id}/items/${itemId}`, {
+      const res = await authFetch(`${API}/transactions/${txn.id}/items/${itemId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quantity: newQty })
@@ -183,7 +208,7 @@ export default function Billing({ cashier, onLogout }) {
 
   const voidItem = async (itemId) => {
     try {
-      const res = await fetch(`${API}/transactions/${txn.id}/items/${itemId}`, { method: 'DELETE' })
+      const res = await authFetch(`${API}/transactions/${txn.id}/items/${itemId}`, { method: 'DELETE' })
       const data = await res.json()
       setTxn(data)
       setItems(data.items)
@@ -194,7 +219,7 @@ export default function Billing({ cashier, onLogout }) {
   const holdBill = async () => {
     if (!txn || items.length === 0) return
     try {
-      await fetch(`${API}/transactions/${txn.id}/hold`, { method: 'PUT' })
+      await authFetch(`${API}/transactions/${txn.id}/hold`, { method: 'PUT' })
       notify('🔒 Bill held')
       createNewBill()
     } catch { notify('Failed to hold bill', 'error') }
@@ -204,9 +229,9 @@ export default function Billing({ cashier, onLogout }) {
     try {
       // Hold current if has items
       if (txn && items.length > 0) {
-        await fetch(`${API}/transactions/${txn.id}/hold`, { method: 'PUT' })
+        await authFetch(`${API}/transactions/${txn.id}/hold`, { method: 'PUT' })
       }
-      const res = await fetch(`${API}/transactions/${id}/recall`, { method: 'PUT' })
+      const res = await authFetch(`${API}/transactions/${id}/recall`, { method: 'PUT' })
       const data = await res.json()
       setTxn(data)
       setItems(data.items || [])
@@ -217,7 +242,7 @@ export default function Billing({ cashier, onLogout }) {
 
   const applyCoupon = async (code) => {
     try {
-      const res = await fetch(`${API}/transactions/${txn.id}/coupon`, {
+      const res = await authFetch(`${API}/transactions/${txn.id}/coupon`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code })
@@ -237,10 +262,10 @@ export default function Billing({ cashier, onLogout }) {
 
   const removeCoupon = async () => {
     try {
-      await fetch(`${API}/transactions/${txn.id}/coupon`, { method: 'DELETE' })
+      await authFetch(`${API}/transactions/${txn.id}/coupon`, { method: 'DELETE' })
       setCoupon(null)
       // Refresh txn
-      const res = await fetch(`${API}/transactions/${txn.id}`)
+      const res = await authFetch(`${API}/transactions/${txn.id}`)
       const data = await res.json()
       setTxn(data)
       setItems(data.items)
@@ -251,7 +276,7 @@ export default function Billing({ cashier, onLogout }) {
   const linkCustomer = async (customerData) => {
     // Link to transaction
     try {
-      await fetch(`${API}/transactions/${txn.id}/customer`, {
+      await authFetch(`${API}/transactions/${txn.id}/customer`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ customer_id: customerData.id })
@@ -264,7 +289,7 @@ export default function Billing({ cashier, onLogout }) {
 
   const processPayment = async (method, tendered) => {
     try {
-      const res = await fetch(`${API}/payments`, {
+      const res = await authFetch(`${API}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -282,7 +307,7 @@ export default function Billing({ cashier, onLogout }) {
       }
       setShowPayment(null)
       // Show receipt
-      const receiptRes = await fetch(`${API}/payments/receipt/${txn.id}`)
+      const receiptRes = await authFetch(`${API}/payments/receipt/${txn.id}`)
       const receipt = await receiptRes.json()
       setShowReceipt({ ...receipt, change: data.change })
     } catch { notify('Payment failed', 'error') }
@@ -701,7 +726,7 @@ function CustomerModal({ onLink, onClose }) {
     setNotFound(false)
     setSearchResult(null)
     try {
-      const res = await fetch(`${API}/customers/search?phone=${phone}`)
+      const res = await authFetch(`${API}/customers/search?phone=${phone}`)
       if (res.ok) {
         const data = await res.json()
         setSearchResult(data)
@@ -718,7 +743,7 @@ function CustomerModal({ onLink, onClose }) {
     if (!newName.trim() || phone.length < 10) return
     setLoading(true)
     try {
-      const res = await fetch(`${API}/customers`, {
+      const res = await authFetch(`${API}/customers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName.trim(), phone, email: newEmail.trim() || undefined })
@@ -729,7 +754,7 @@ function CustomerModal({ onLink, onClose }) {
       } else {
         // If phone already exists, try to fetch and link
         if (data.customer_id) {
-          const fetchRes = await fetch(`${API}/customers/search?phone=${phone}`)
+          const fetchRes = await authFetch(`${API}/customers/search?phone=${phone}`)
           if (fetchRes.ok) {
             const existing = await fetchRes.json()
             onLink(existing)
@@ -973,7 +998,7 @@ function HeldBillsModal({ onRecall, onClose }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch(`${API}/transactions/status/held`)
+    authFetch(`${API}/transactions/status/held`)
       .then(r => r.json())
       .then(d => { setHeld(d); setLoading(false) })
       .catch(() => setLoading(false))

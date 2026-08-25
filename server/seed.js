@@ -1,4 +1,5 @@
 const db = require('./db');
+const { hashPin } = require('./utils/auth');
 
 // Clear existing data
 db.exec('DELETE FROM payments');
@@ -8,15 +9,16 @@ db.exec('DELETE FROM coupons');
 db.exec('DELETE FROM customers');
 db.exec('DELETE FROM products');
 db.exec('DELETE FROM cashiers');
+db.exec('DELETE FROM bill_sequence');
 
 // Reset auto-increment
 db.exec("DELETE FROM sqlite_sequence");
 
-// ── Cashiers ──
+// ── Cashiers (PINs are bcrypt-hashed) ──
 const insertCashier = db.prepare('INSERT INTO cashiers (name, employee_code, pin, role) VALUES (?, ?, ?, ?)');
-insertCashier.run('Rahul Sharma', 'EMP001', '1234', 'cashier');
-insertCashier.run('Priya Patel', 'EMP002', '5678', 'cashier');
-insertCashier.run('Amit Kumar', 'EMP003', '9999', 'supervisor');
+insertCashier.run('Rahul Sharma', 'EMP001', hashPin('1234'), 'cashier');
+insertCashier.run('Priya Patel', 'EMP002', hashPin('5678'), 'cashier');
+insertCashier.run('Amit Kumar', 'EMP003', hashPin('9999'), 'supervisor');
 
 // ── Customers ──
 const insertCustomer = db.prepare('INSERT INTO customers (name, phone, email, loyalty_points, membership_tier) VALUES (?, ?, ?, ?, ?)');

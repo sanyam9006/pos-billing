@@ -26,7 +26,8 @@ export default function Login({ onLogin }) {
         return
       }
 
-      onLogin(data.cashier)
+      // Store token alongside cashier data
+      onLogin({ ...data.cashier, token: data.token })
     } catch (err) {
       setError('Server connection failed. Please try again.')
     } finally {
