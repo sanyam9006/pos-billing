@@ -15,12 +15,14 @@
     "test": "jest --forceExit --detectOpenHandles"
   },
   "dependencies": {
+    "@xmldom/xmldom": "^0.9.12",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.0.0",
     "concurrently": "^9.0.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.0",
+    "jsbarcode": "^3.12.3",
     "jsonwebtoken": "^9.0.3"
   },
   "devDependencies": {

@@ -168,10 +168,24 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const { name, category, mrp, selling_price, unit, variant_size, variant_color, cost_price } = req.body;
+  const { barcode, name, category, mrp, selling_price, unit, variant_size, variant_color, cost_price } = req.body;
+
+  let barcodeChanged = false;
+  let newBarcode = product.barcode;
+
+  if (barcode && barcode.trim() && barcode.trim() !== product.barcode) {
+    const cleanBarcode = barcode.trim();
+    const existing = db.prepare('SELECT id FROM products WHERE barcode = ? AND id != ?').get(cleanBarcode, req.params.id);
+    if (existing) {
+      return res.status(409).json({ error: `Barcode "${cleanBarcode}" is already assigned to another product` });
+    }
+    newBarcode = cleanBarcode;
+    barcodeChanged = true;
+  }
 
   db.prepare(`
     UPDATE products SET
+      barcode = ?,
       name = COALESCE(?, name),
       category = COALESCE(?, category),
       mrp = COALESCE(?, mrp),
@@ -184,6 +198,7 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
       cost_price = COALESCE(?, cost_price)
     WHERE id = ?
   `).run(
+    newBarcode,
     name || null, category || null, mrp ?? null, selling_price ?? null,
     unit || null,
     variant_size ?? null, variant_color ?? null, cost_price ?? null,
@@ -191,6 +206,17 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
   );
 
   const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+
+  if (barcodeChanged) {
+    logAudit({
+      cashier_id: req.cashier.id,
+      cashier_name: req.cashier.name,
+      action: 'edit_barcode',
+      entity_type: 'product',
+      entity_id: product.id,
+      details: { old_barcode: product.barcode, new_barcode: newBarcode }
+    });
+  }
 
   logAudit({
     cashier_id: req.cashier.id,

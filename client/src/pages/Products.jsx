@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice, getStoreConfig } from '../utils/api'
+import { BarcodeSvg, LABEL_SIZES, generateTagPrintHtml } from '../utils/barcode'
+import ScanPromptModal from '../components/ScanPromptModal'
 
 export default function Products({ cashier }) {
   const [products, setProducts] = useState([])
@@ -10,6 +12,8 @@ export default function Products({ cashier }) {
   const [editProduct, setEditProduct] = useState(null)
   const [showStockModal, setShowStockModal] = useState(null)
   const [showTagModal, setShowTagModal] = useState(null)
+  const [selectedProductIds, setSelectedProductIds] = useState([])
+  const [showBulkPrintModal, setShowBulkPrintModal] = useState(false)
   const [toast, setToast] = useState(null)
   const isSupervisor = cashier?.role === 'supervisor'
 
@@ -34,6 +38,20 @@ export default function Products({ cashier }) {
     p.category.toLowerCase().includes(search.toLowerCase()) ||
     p.barcode.includes(search)
   )
+
+  const toggleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedProductIds(filtered.map(p => p.id))
+    } else {
+      setSelectedProductIds([])
+    }
+  }
+
+  const toggleSelectProduct = (id) => {
+    setSelectedProductIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
 
   const handleDelete = async (product) => {
     if (!confirm(`Deactivate "${product.name}"?`)) return
@@ -61,6 +79,8 @@ export default function Products({ cashier }) {
     } catch { notify('Failed to update stock', 'error') }
   }
 
+  const selectedProducts = products.filter(p => selectedProductIds.includes(p.id))
+
   return (
     <div className="page products-page">
       {toast && <div className={`toast ${toast.type}`}>{toast.msg}</div>}
@@ -70,16 +90,27 @@ export default function Products({ cashier }) {
           <h1>📦 Product Catalog & Inventory</h1>
           <p className="page-subtitle">{products.length} active products & variants</p>
         </div>
-        {isSupervisor && (
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="btn-primary" style={{ background: 'var(--accent-secondary)' }} onClick={() => setShowMatrixModal(true)}>
-              ⚡ Matrix Variant Generator
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {selectedProductIds.length > 0 && (
+            <button
+              className="btn-primary"
+              style={{ background: '#2563eb' }}
+              onClick={() => setShowBulkPrintModal(true)}
+            >
+              🏷️ Print Selected Tags ({selectedProductIds.length})
             </button>
-            <button className="btn-primary" onClick={() => { setEditProduct(null); setShowForm(true) }}>
-              + Add Product
-            </button>
-          </div>
-        )}
+          )}
+          {isSupervisor && (
+            <>
+              <button className="btn-primary" style={{ background: 'var(--accent-secondary)' }} onClick={() => setShowMatrixModal(true)}>
+                ⚡ Matrix Variant Generator
+              </button>
+              <button className="btn-primary" onClick={() => { setEditProduct(null); setShowForm(true) }}>
+                + Add Product
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Search */}
@@ -100,49 +131,69 @@ export default function Products({ cashier }) {
         <table className="data-table">
           <thead>
             <tr>
+              <th style={{ width: '40px', textAlign: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={filtered.length > 0 && selectedProductIds.length === filtered.length}
+                  onChange={toggleSelectAll}
+                  title="Select all"
+                />
+              </th>
               <th>Product / Variant</th>
               <th>SKU</th>
               <th>Category</th>
               <th>MRP</th>
               <th>Selling Price</th>
               <th>Stock</th>
-              {isSupervisor && <th>Actions</th>}
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(p => (
-              <tr key={p.id} className={p.stock_qty <= 10 ? 'low-stock-row' : ''}>
-                <td>
-                  <div className="product-cell">
-                    <div className="product-name-cell">{p.name}</div>
-                    <div className="product-barcode">
-                      {p.barcode}
-                      {p.variant_size && <span className="variant-tag size">{p.variant_size}</span>}
-                      {p.variant_color && <span className="variant-tag color">{p.variant_color}</span>}
-                    </div>
-                  </div>
-                </td>
-                <td><code className="sku-code">{p.sku}</code></td>
-                <td><span className="category-badge">{p.category}</span></td>
-                <td className="num">{formatPrice(p.mrp)}</td>
-                <td className="num">{formatPrice(p.selling_price)}</td>
-                <td>
-                  <span className={`stock-badge ${p.stock_qty <= 0 ? 'out' : p.stock_qty <= 10 ? 'low' : 'ok'}`}>
-                    {p.stock_qty} {p.unit}
-                  </span>
-                </td>
-                {isSupervisor && (
+            {filtered.map(p => {
+              const isSelected = selectedProductIds.includes(p.id)
+              return (
+                <tr key={p.id} className={`${p.stock_qty <= 10 ? 'low-stock-row' : ''} ${isSelected ? 'selected-row' : ''}`}>
+                  <td style={{ textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleSelectProduct(p.id)}
+                    />
+                  </td>
                   <td>
-                    <div className="action-cell">
-                      <button className="icon-btn" title="Print Barcode Tag" onClick={() => setShowTagModal(p)}>🏷️</button>
-                      <button className="icon-btn" title="Edit" onClick={() => { setEditProduct(p); setShowForm(true) }}>✏️</button>
-                      <button className="icon-btn" title="Adjust Stock" onClick={() => setShowStockModal(p)}>📦</button>
-                      <button className="icon-btn danger" title="Deactivate" onClick={() => handleDelete(p)}>🗑️</button>
+                    <div className="product-cell">
+                      <div className="product-name-cell">{p.name}</div>
+                      <div className="product-barcode">
+                        <span style={{ fontFamily: 'monospace' }}>{p.barcode}</span>
+                        {p.variant_size && <span className="variant-tag size">{p.variant_size}</span>}
+                        {p.variant_color && <span className="variant-tag color">{p.variant_color}</span>}
+                      </div>
                     </div>
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td><code className="sku-code">{p.sku}</code></td>
+                  <td><span className="category-badge">{p.category}</span></td>
+                  <td className="num">{formatPrice(p.mrp)}</td>
+                  <td className="num">{formatPrice(p.selling_price)}</td>
+                  <td>
+                    <span className={`stock-badge ${p.stock_qty <= 0 ? 'out' : p.stock_qty <= 10 ? 'low' : 'ok'}`}>
+                      {p.stock_qty} {p.unit}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="action-cell">
+                      <button className="icon-btn" title="Print Real Barcode Tag" onClick={() => setShowTagModal(p)}>🏷️</button>
+                      {isSupervisor && (
+                        <>
+                          <button className="icon-btn" title="Edit (Barcode, details)" onClick={() => { setEditProduct(p); setShowForm(true) }}>✏️</button>
+                          <button className="icon-btn" title="Adjust Stock" onClick={() => setShowStockModal(p)}>📦</button>
+                          <button className="icon-btn danger" title="Deactivate" onClick={() => handleDelete(p)}>🗑️</button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
         {filtered.length === 0 && (
@@ -153,24 +204,39 @@ export default function Products({ cashier }) {
       {/* Matrix / Variant Generator Modal */}
       {showMatrixModal && (
         <MatrixGeneratorModal
-          onSuccess={() => { setShowMatrixModal(false); loadProducts() }}
+          onSuccess={(createdVariants) => {
+            setShowMatrixModal(false)
+            loadProducts()
+            if (createdVariants && createdVariants.length > 0) {
+              setSelectedProductIds(createdVariants.map(v => v.id))
+            }
+          }}
           onClose={() => setShowMatrixModal(false)}
           notify={notify}
         />
       )}
 
-      {/* Barcode Tag Modal */}
+      {/* Single Barcode Tag Modal with Code128 */}
       {showTagModal && (
-        <BarcodeTagModal
+        <BarcodePriceTagModal
           product={showTagModal}
           onClose={() => setShowTagModal(null)}
         />
       )}
 
-      {/* Product Form Modal */}
+      {/* Bulk Barcode Tag Print Modal */}
+      {showBulkPrintModal && (
+        <BulkBarcodePrintModal
+          products={selectedProducts}
+          onClose={() => setShowBulkPrintModal(false)}
+        />
+      )}
+
+      {/* Product Form Modal (With supervisor barcode editing & scan prompt) */}
       {showForm && (
         <ProductFormModal
           product={editProduct}
+          cashier={cashier}
           onSave={() => { setShowForm(false); loadProducts() }}
           onClose={() => setShowForm(false)}
           notify={notify}
@@ -201,6 +267,7 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
   const [sellingPrice, setSellingPrice] = useState('')
   const [costPrice, setCostPrice] = useState('')
   const [stockPerVariant, setStockPerVariant] = useState(10)
+  const [showScanner, setShowScanner] = useState(false)
 
   // Quick preset selections
   const COMMON_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL']
@@ -279,7 +346,7 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
       const data = await res.json()
       if (res.ok) {
         notify(`🎉 Created ${variants.length} product variants successfully!`)
-        onSuccess()
+        onSuccess(variants)
       } else {
         notify(data.error || 'Failed to create variants', 'error')
       }
@@ -307,8 +374,18 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
             <input placeholder="e.g. LEK" value={baseSku} onChange={e => setBaseSku(e.target.value.toUpperCase())} />
           </div>
           <div className="form-group" style={{ flex: 1 }}>
-            <label>Barcode Prefix</label>
-            <input placeholder="e.g. 890123" value={barcodePrefix} onChange={e => setBarcodePrefix(e.target.value)} />
+            <label>Barcode Prefix (or Scan)</label>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              <input placeholder="e.g. 890123" value={barcodePrefix} onChange={e => setBarcodePrefix(e.target.value)} />
+              <button
+                type="button"
+                className="icon-btn"
+                title="Scan sample barcode prefix"
+                onClick={() => setShowScanner(true)}
+              >
+                📷
+              </button>
+            </div>
           </div>
         </div>
 
@@ -380,11 +457,11 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
           <input type="number" value={stockPerVariant} onChange={e => setStockPerVariant(e.target.value)} />
         </div>
 
-        {/* Live Matrix Preview */}
+        {/* Live Matrix Preview with Barcodes */}
         {variants.length > 0 && (
           <div style={{ marginTop: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <strong>Matrix Preview ({variants.length} variants will be created):</strong>
+              <strong>Matrix Preview ({variants.length} variants ready):</strong>
             </div>
             <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
               <table className="data-table compact">
@@ -427,115 +504,254 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
           </button>
         </div>
       </div>
+
+      {showScanner && (
+        <ScanPromptModal
+          title="Scan Barcode for Matrix Prefix"
+          onScan={(scanned) => {
+            const prefix = scanned.length > 6 ? scanned.slice(0, 6) : scanned
+            setBarcodePrefix(prefix)
+            notify(`Set barcode prefix: ${prefix}`)
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   )
 }
 
 // ═══════════════════════════════════════════════
-// CLOTHING / RETAIL BARCODE PRICE TAG MODAL
+// REAL CODE128 BARCODE PRICE TAG MODAL (Single Item)
 // ═══════════════════════════════════════════════
-function BarcodeTagModal({ product, onClose }) {
+function BarcodePriceTagModal({ product, onClose }) {
   const [store, setStore] = useState(null)
+  const [labelSize, setLabelSize] = useState('50x25')
+  const [printCopies, setPrintCopies] = useState(1)
+
   useEffect(() => {
     getStoreConfig().then(setStore)
   }, [])
 
   const printTag = () => {
-    const printWindow = window.open('', '_blank', 'width=450,height=600')
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Barcode Tag - ${product.sku}</title>
-        <style>
-          body { font-family: -apple-system, sans-serif; text-align: center; margin: 0; padding: 20px; }
-          .tag {
-            width: 260px;
-            border: 2px dashed #333;
-            border-radius: 8px;
-            padding: 16px;
-            margin: auto;
-            text-align: center;
-          }
-          .store-name { font-size: 14px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
-          .item-name { font-size: 13px; font-weight: 700; margin: 6px 0; }
-          .barcode-bars {
-            font-family: 'Courier New', monospace;
-            font-size: 26px;
-            letter-spacing: 3px;
-            margin: 8px 0 2px;
-            display: inline-block;
-            background: #eee;
-            padding: 4px 8px;
-            border-radius: 4px;
-          }
-          .digits { font-family: monospace; font-size: 12px; margin-bottom: 8px; }
-          .meta-row { display: flex; justify-content: space-around; font-size: 12px; margin: 6px 0; border-top: 1px solid #ddd; padding-top: 6px; }
-          .price-row { margin-top: 8px; }
-          .mrp { text-decoration: line-through; color: #777; font-size: 12px; margin-right: 6px; }
-          .sale-price { font-size: 18px; font-weight: 800; color: #111; }
-          @media print {
-            button { display: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="tag">
-          <div class="store-name">${store?.store_name || 'STORE'}</div>
-          <div class="item-name">${product.name}</div>
-          <div class="barcode-bars">|||||||||||||||||||</div>
-          <div class="digits">${product.barcode}</div>
-          <div class="meta-row">
-            <span>SKU: <strong>${product.sku}</strong></span>
-            ${product.variant_size ? `<span>Size: <strong>${product.variant_size}</strong></span>` : ''}
-          </div>
-          <div class="price-row">
-            <span class="mrp">MRP ₹${product.mrp}</span>
-            <span class="sale-price">₹${product.selling_price}</span>
-          </div>
-        </div>
-        <script>
-          window.onload = function() { window.print(); }
-        </script>
-      </body>
-      </html>
-    `
+    const printWindow = window.open('', '_blank', 'width=550,height=650')
+    const items = [{ ...product, print_qty: printCopies }]
+    const html = generateTagPrintHtml(items, store, labelSize)
     printWindow.document.write(html)
     printWindow.document.close()
   }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
         <h2>🏷️ Barcode Price Tag <button className="modal-close" onClick={onClose}>✕</button></h2>
-        <div style={{ textAlign: 'center', padding: '16px', border: '1.5px dashed var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', margin: '14px 0' }}>
-          <div style={{ fontSize: '13px', fontWeight: 800 }}>{store?.store_name || 'STORE'}</div>
-          <div style={{ fontSize: '14px', fontWeight: 700, margin: '6px 0' }}>{product.name}</div>
-          <div style={{ fontSize: '26px', letterSpacing: '4px', fontFamily: 'monospace', margin: '8px 0', background: 'var(--bg-subtle)', padding: '6px', borderRadius: '4px' }}>
-            |||||||||||||||||||
+
+        {/* Size Selection */}
+        <div style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
+          {LABEL_SIZES.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              className={`pill-btn ${labelSize === s.id ? 'active' : ''}`}
+              onClick={() => setLabelSize(s.id)}
+              style={{ fontSize: '11px', padding: '5px 8px' }}
+            >
+              {s.name.split(' ')[0]} {s.name.includes('A4') ? 'A4' : ''}
+            </button>
+          ))}
+        </div>
+
+        {/* Visual Live Tag Preview */}
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '14px',
+            border: '1.5px dashed var(--border)',
+            borderRadius: 'var(--radius)',
+            background: 'var(--surface)',
+            margin: '12px 0'
+          }}
+        >
+          <div style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            {store?.store_name || 'AURA BOUTIQUE'}
           </div>
-          <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{product.barcode}</div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', marginTop: '8px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, margin: '4px 0' }}>
+            {product.name}
+          </div>
+
+          {/* Real Code128 SVG Barcode */}
+          <div style={{ margin: '6px auto', background: '#fff', padding: '6px', borderRadius: '4px', display: 'inline-block' }}>
+            <BarcodeSvg
+              barcode={product.barcode}
+              width={labelSize === '38x25' ? 1.2 : 1.5}
+              height={labelSize === '38x25' ? 26 : 32}
+              fontSize={11}
+              margin={8}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', marginTop: '4px' }}>
             <span>SKU: <strong>{product.sku}</strong></span>
             {product.variant_size && <span>Size: <strong>{product.variant_size}</strong></span>}
+            {product.variant_color && <span>Color: <strong>{product.variant_color}</strong></span>}
           </div>
-          <div style={{ marginTop: '10px' }}>
-            <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', marginRight: '8px' }}>{formatPrice(product.mrp)}</span>
-            <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent-secondary)' }}>{formatPrice(product.selling_price)}</span>
+
+          <div style={{ marginTop: '8px' }}>
+            {product.mrp && (
+              <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', marginRight: '8px', fontSize: '13px' }}>
+                {formatPrice(product.mrp)}
+              </span>
+            )}
+            <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent-secondary)' }}>
+              {formatPrice(product.selling_price)}
+            </span>
           </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 0' }}>
+          <label style={{ fontSize: '13px', fontWeight: 600 }}>Number of copies:</label>
+          <input
+            type="number"
+            min="1"
+            max="1000"
+            value={printCopies}
+            onChange={e => setPrintCopies(Math.max(1, parseInt(e.target.value) || 1))}
+            style={{ width: '80px', textAlign: 'center' }}
+          />
         </div>
 
         <div className="modal-actions">
           <button className="modal-btn secondary" onClick={onClose}>Close</button>
-          <button className="modal-btn primary" onClick={printTag}>🖨️ Print Label / Sticker</button>
+          <button className="modal-btn primary" onClick={printTag}>🖨️ Print Real Barcode Tag</button>
         </div>
       </div>
     </div>
   )
 }
 
-function ProductFormModal({ product, onSave, onClose, notify }) {
+// ═══════════════════════════════════════════════
+// BULK BARCODE PRINT MODAL (Multiple Items)
+// ═══════════════════════════════════════════════
+function BulkBarcodePrintModal({ products, onClose }) {
+  const [store, setStore] = useState(null)
+  const [labelSize, setLabelSize] = useState('50x25')
+  const [copiesMap, setCopiesMap] = useState({})
+
+  useEffect(() => {
+    getStoreConfig().then(setStore)
+    const initialCopies = {}
+    products.forEach(p => {
+      initialCopies[p.id] = 1
+    })
+    setCopiesMap(initialCopies)
+  }, [products])
+
+  const setAllCopies = (val) => {
+    const updated = {}
+    products.forEach(p => {
+      updated[p.id] = val === 'stock' ? Math.max(1, p.stock_qty || 1) : Math.max(1, parseInt(val) || 1)
+    })
+    setCopiesMap(updated)
+  }
+
+  const totalTags = products.reduce((sum, p) => sum + (copiesMap[p.id] || 1), 0)
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=650,height=750')
+    const items = products.map(p => ({
+      ...p,
+      print_qty: copiesMap[p.id] || 1
+    }))
+    const html = generateTagPrintHtml(items, store, labelSize)
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal wide-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '650px' }}>
+        <h2>🏷️ Bulk Barcode Tag Printing <button className="modal-close" onClick={onClose}>✕</button></h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '14px' }}>
+          Printing tags for <strong>{products.length}</strong> selected products ({totalTags} total labels to print)
+        </p>
+
+        {/* Stock Layout Selection */}
+        <div style={{ marginBottom: '14px' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>
+            SELECT LABEL STOCK FORMAT:
+          </label>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            {LABEL_SIZES.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                className={`pill-btn ${labelSize === s.id ? 'active' : ''}`}
+                onClick={() => setLabelSize(s.id)}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Quick copies buttons */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
+          <span style={{ fontSize: '12px', fontWeight: 600 }}>Set copies:</span>
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setAllCopies(1)}>1 per product</button>
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setAllCopies(2)}>2 per product</button>
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setAllCopies('stock')}>Match current stock</button>
+        </div>
+
+        {/* Product list with editable copies */}
+        <div style={{ maxHeight: '240px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+          <table className="data-table compact">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>SKU</th>
+                <th>Barcode</th>
+                <th>Price</th>
+                <th style={{ width: '90px' }}>Copies</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map(p => (
+                <tr key={p.id}>
+                  <td><strong>{p.name}</strong></td>
+                  <td><code>{p.sku}</code></td>
+                  <td style={{ fontFamily: 'monospace' }}>{p.barcode}</td>
+                  <td className="num">{formatPrice(p.selling_price)}</td>
+                  <td>
+                    <input
+                      type="number"
+                      min="1"
+                      value={copiesMap[p.id] ?? 1}
+                      onChange={e => setCopiesMap({ ...copiesMap, [p.id]: Math.max(1, parseInt(e.target.value) || 1) })}
+                      style={{ width: '60px', padding: '3px 6px', textAlign: 'center' }}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: '18px' }}>
+          <button className="modal-btn secondary" onClick={onClose}>Cancel</button>
+          <button className="modal-btn primary" onClick={handlePrint}>
+            🖨️ Print {totalTags} Barcode Tags ({labelSize})
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════
+// PRODUCT FORM MODAL (Supervisor Barcode Editing & Scan Prompt)
+// ═══════════════════════════════════════════════
+function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
   const isEdit = !!product
+  const isSupervisor = cashier?.role === 'supervisor'
   const [form, setForm] = useState({
     sku: product?.sku || '',
     barcode: product?.barcode || '',
@@ -550,6 +766,7 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
     unit: product?.unit || 'pcs'
   })
   const [saving, setSaving] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -568,17 +785,22 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
         })
       })
       if (res.ok) {
-        notify(isEdit ? 'Product updated' : 'Product created')
+        notify(isEdit ? 'Product updated successfully' : 'Product created successfully')
         onSave()
       } else {
         const data = await res.json()
-        notify(data.error, 'error')
+        notify(data.error || 'Failed to save product', 'error')
       }
-    } catch { notify('Failed to save', 'error') }
+    } catch {
+      notify('Failed to save product', 'error')
+    }
     setSaving(false)
   }
 
   const update = (key, val) => setForm(prev => ({ ...prev, [key]: val }))
+
+  // Barcode can be edited on new products, or by supervisors on existing products
+  const canEditBarcode = !isEdit || isSupervisor
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -586,8 +808,35 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
         <h2>{isEdit ? '✏️ Edit' : '➕ New'} Boutique Garment <button className="modal-close" onClick={onClose}>✕</button></h2>
         <form onSubmit={handleSubmit} className="product-form">
           <div className="form-row">
-            <div className="form-group"><label>SKU *</label><input value={form.sku} onChange={e => update('sku', e.target.value)} required disabled={isEdit} /></div>
-            <div className="form-group"><label>Barcode *</label><input value={form.barcode} onChange={e => update('barcode', e.target.value)} required disabled={isEdit} /></div>
+            <div className="form-group">
+              <label>SKU *</label>
+              <input value={form.sku} onChange={e => update('sku', e.target.value)} required disabled={isEdit} />
+            </div>
+            <div className="form-group">
+              <label>
+                Barcode * {isEdit && isSupervisor && <span style={{ fontSize: '11px', color: '#16a34a' }}>(Supervisor editable)</span>}
+              </label>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <input
+                  value={form.barcode}
+                  onChange={e => update('barcode', e.target.value)}
+                  required
+                  disabled={!canEditBarcode}
+                  style={{ fontFamily: 'monospace' }}
+                  placeholder="Scan or type barcode"
+                />
+                {canEditBarcode && (
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Scan with barcode gun"
+                    onClick={() => setShowScanner(true)}
+                  >
+                    📷
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
           <div className="form-group"><label>Name *</label><input value={form.name} onChange={e => update('name', e.target.value)} required /></div>
           <div className="form-row">
@@ -616,6 +865,17 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
           </div>
         </form>
       </div>
+
+      {showScanner && (
+        <ScanPromptModal
+          title="Scan Garment Barcode"
+          onScan={(scanned) => {
+            update('barcode', scanned)
+            notify(`Scanned barcode: ${scanned}`)
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
     </div>
   )
 }
