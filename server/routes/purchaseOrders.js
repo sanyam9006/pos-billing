@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../utils/auth');
+const { logAudit } = require('../utils/audit');
 
 // Generate unique PO number: PO-YYYYMM-XXXX
 function generatePoNumber() {
@@ -38,7 +39,8 @@ router.get('/:id', requireRole('supervisor'), (req, res) => {
   if (!po) return res.status(404).json({ error: 'Purchase order not found' });
 
   const items = db.prepare(`
-    SELECT poi.*, p.name as product_name, p.sku, p.barcode, p.stock_qty as current_stock, p.unit
+    SELECT poi.*, p.name as product_name, p.sku, p.barcode, p.stock_qty as current_stock,
+           p.variant_size, p.variant_color, p.unit
     FROM purchase_order_items poi
     JOIN products p ON poi.product_id = p.id
     WHERE poi.po_id = ?
@@ -97,50 +99,95 @@ router.post('/', requireRole('supervisor'), (req, res) => {
 
   createTxn();
 
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'create_purchase_order',
+    entity_type: 'purchase_order',
+    entity_id: poId,
+    details: { po_number: poNumber, totalCost, supplier_id }
+  });
+
   const createdPo = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(poId);
   res.status(201).json(createdPo);
 });
 
-// ── POST /api/purchase-orders/:id/receive — Receive stock from PO (supervisor only) ──
+// ── POST /api/purchase-orders/:id/receive — Receive stock from PO (idempotent & partial support) ──
 router.post('/:id/receive', requireRole('supervisor'), (req, res) => {
   const po = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id);
   if (!po) return res.status(404).json({ error: 'Purchase order not found' });
   if (po.status === 'received') {
-    return res.status(400).json({ error: 'Purchase order has already been received' });
+    return res.status(400).json({ error: 'Purchase order has already been fully received' });
   }
 
-  const { items } = req.body; // optional custom received quantities: [{ id, quantity_received }]
+  const { items } = req.body; // array of: { id (poi.id), received_now (or quantity_received total) }
   const poItems = db.prepare('SELECT * FROM purchase_order_items WHERE po_id = ?').all(po.id);
 
-  const updateItem = db.prepare('UPDATE purchase_order_items SET quantity_received = ? WHERE id = ?');
-  const updateProductStock = db.prepare('UPDATE products SET stock_qty = stock_qty + ?, cost_price = ? WHERE id = ?');
-  const updatePo = db.prepare("UPDATE purchase_orders SET status = 'received', received_at = CURRENT_TIMESTAMP WHERE id = ?");
+  let anyNewStockReceived = false;
+  let allFullyReceived = true;
 
   const receiveTxn = db.transaction(() => {
     for (const poi of poItems) {
-      let receivedQty = poi.quantity_ordered;
+      let deltaToAdd = 0;
+      let newTotalReceived = poi.quantity_received;
+
       if (Array.isArray(items)) {
         const found = items.find(i => i.id === poi.id);
-        if (found && found.quantity_received !== undefined) {
-          receivedQty = Number(found.quantity_received);
+        if (found) {
+          if (found.received_now !== undefined) {
+            deltaToAdd = Math.max(0, Number(found.received_now));
+            newTotalReceived = poi.quantity_received + deltaToAdd;
+          } else if (found.quantity_received !== undefined) {
+            newTotalReceived = Math.max(0, Number(found.quantity_received));
+            deltaToAdd = Math.max(0, newTotalReceived - poi.quantity_received);
+          }
         }
+      } else {
+        // Full receipt of whatever is remaining
+        deltaToAdd = Math.max(0, poi.quantity_ordered - poi.quantity_received);
+        newTotalReceived = poi.quantity_ordered;
       }
 
-      updateItem.run(receivedQty, poi.id);
-      // Increment stock in products table
-      updateProductStock.run(receivedQty, poi.cost_price, poi.product_id);
+      if (deltaToAdd > 0) {
+        anyNewStockReceived = true;
+        // Update purchase order item
+        db.prepare('UPDATE purchase_order_items SET quantity_received = ? WHERE id = ?').run(newTotalReceived, poi.id);
+        // Increment stock and update cost price on product
+        db.prepare('UPDATE products SET stock_qty = stock_qty + ?, cost_price = ? WHERE id = ?')
+          .run(deltaToAdd, poi.cost_price, poi.product_id);
+      }
+
+      if (newTotalReceived < poi.quantity_ordered) {
+        allFullyReceived = false;
+      }
     }
 
-    updatePo.run(po.id);
+    const newStatus = allFullyReceived ? 'received' : 'partially_received';
+    db.prepare("UPDATE purchase_orders SET status = ?, received_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(newStatus, po.id);
   });
 
   receiveTxn();
 
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'receive_purchase_order',
+    entity_type: 'purchase_order',
+    entity_id: po.id,
+    details: { po_number: po.po_number, anyNewStockReceived, allFullyReceived }
+  });
+
   const updatedPo = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(po.id);
+  const updatedItems = db.prepare('SELECT * FROM purchase_order_items WHERE po_id = ?').all(po.id);
+
   res.json({
     success: true,
-    message: `Purchase Order ${updatedPo.po_number} received. Inventory stock updated!`,
-    po: updatedPo
+    message: allFullyReceived
+      ? `Purchase Order ${updatedPo.po_number} fully received. Stock updated.`
+      : `Purchase Order ${updatedPo.po_number} partially received. Stock updated.`,
+    po: updatedPo,
+    items: updatedItems
   });
 });
 
@@ -148,8 +195,8 @@ router.post('/:id/receive', requireRole('supervisor'), (req, res) => {
 router.delete('/:id', requireRole('supervisor'), (req, res) => {
   const po = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id);
   if (!po) return res.status(404).json({ error: 'Purchase order not found' });
-  if (po.status === 'received') {
-    return res.status(400).json({ error: 'Cannot delete a received purchase order' });
+  if (po.status === 'received' || po.status === 'partially_received') {
+    return res.status(400).json({ error: 'Cannot delete a received or partially received purchase order' });
   }
 
   db.prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);

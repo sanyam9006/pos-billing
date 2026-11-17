@@ -10,6 +10,7 @@ import Reports from './pages/Reports'
 import Refunds from './pages/Refunds'
 import PurchaseOrders from './pages/PurchaseOrders'
 import CustomOrders from './pages/CustomOrders'
+import Settings from './pages/Settings'
 
 const SESSION_KEY = 'pos_cashier_session'
 
@@ -62,6 +63,7 @@ function App() {
               <Route path="/reports" element={<Reports cashier={cashier} />} />
               <Route path="/refunds" element={<Refunds cashier={cashier} />} />
               <Route path="/purchase-orders" element={<PurchaseOrders cashier={cashier} />} />
+              <Route path="/settings" element={<Settings cashier={cashier} />} />
             </>
           )}
           <Route path="*" element={<Navigate to="/" replace />} />

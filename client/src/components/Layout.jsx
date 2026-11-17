@@ -20,10 +20,10 @@ export default function Layout({ cashier, onLogout }) {
     <div className="app-layout">
       <nav className="sidebar">
         <div className="sidebar-header">
-          <span className="sidebar-logo">🏪</span>
+          <span className="sidebar-logo">👗</span>
           <div>
             <div className="sidebar-title">{storeName}</div>
-            <div className="sidebar-subtitle">Point of Sale</div>
+            <div className="sidebar-subtitle">Boutique POS</div>
           </div>
         </div>
 
@@ -61,6 +61,10 @@ export default function Layout({ cashier, onLogout }) {
               <NavLink to="/purchase-orders" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                 <span className="nav-icon">🚚</span>
                 <span>Procurement</span>
+              </NavLink>
+              <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <span className="nav-icon">⚙️</span>
+                <span>Settings</span>
               </NavLink>
             </>
           )}

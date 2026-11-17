@@ -548,9 +548,12 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
     sku: product?.sku || '',
     barcode: product?.barcode || '',
     name: product?.name || '',
-    category: product?.category || '',
+    category: product?.category || 'Kurtis',
     mrp: product?.mrp || '',
     selling_price: product?.selling_price || '',
+    cost_price: product?.cost_price || '',
+    variant_size: product?.variant_size || '',
+    variant_color: product?.variant_color || '',
     hsn_code: product?.hsn_code || '6204',
     tax_rate: product?.tax_rate ?? 5,
     stock_qty: product?.stock_qty ?? 0,
@@ -570,6 +573,7 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
           ...form,
           mrp: parseFloat(form.mrp),
           selling_price: parseFloat(form.selling_price),
+          cost_price: parseFloat(form.cost_price || 0),
           tax_rate: parseFloat(form.tax_rate),
           stock_qty: parseInt(form.stock_qty)
         })
@@ -590,7 +594,7 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal wide-modal" onClick={e => e.stopPropagation()}>
-        <h2>{isEdit ? '✏️ Edit' : '➕ New'} Product <button className="modal-close" onClick={onClose}>✕</button></h2>
+        <h2>{isEdit ? '✏️ Edit' : '➕ New'} Boutique Garment <button className="modal-close" onClick={onClose}>✕</button></h2>
         <form onSubmit={handleSubmit} className="product-form">
           <div className="form-row">
             <div className="form-group"><label>SKU *</label><input value={form.sku} onChange={e => update('sku', e.target.value)} required disabled={isEdit} /></div>
@@ -602,20 +606,27 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
             <div className="form-group"><label>HSN Code</label><input value={form.hsn_code} onChange={e => update('hsn_code', e.target.value)} /></div>
           </div>
           <div className="form-row">
-            <div className="form-group"><label>MRP *</label><input type="number" step="0.01" value={form.mrp} onChange={e => update('mrp', e.target.value)} required /></div>
-            <div className="form-group"><label>Selling Price *</label><input type="number" step="0.01" value={form.selling_price} onChange={e => update('selling_price', e.target.value)} required /></div>
-            <div className="form-group"><label>Tax Rate %</label><input type="number" value={form.tax_rate} onChange={e => update('tax_rate', e.target.value)} /></div>
+            <div className="form-group"><label>Size</label><input placeholder="e.g. S, M, L, Free" value={form.variant_size} onChange={e => update('variant_size', e.target.value)} /></div>
+            <div className="form-group"><label>Color</label><input placeholder="e.g. Navy Blue, Maroon" value={form.variant_color} onChange={e => update('variant_color', e.target.value)} /></div>
           </div>
-          {!isEdit && (
-            <div className="form-row">
-              <div className="form-group"><label>Initial Stock</label><input type="number" value={form.stock_qty} onChange={e => update('stock_qty', e.target.value)} /></div>
-              <div className="form-group"><label>Unit</label><input value={form.unit} onChange={e => update('unit', e.target.value)} /></div>
-            </div>
-          )}
+          <div className="form-row">
+            <div className="form-group"><label>MRP (Tag Price) *</label><input type="number" step="0.01" value={form.mrp} onChange={e => update('mrp', e.target.value)} required /></div>
+            <div className="form-group"><label>Selling Price (Tax-Inclusive) *</label><input type="number" step="0.01" value={form.selling_price} onChange={e => update('selling_price', e.target.value)} required /></div>
+            <div className="form-group"><label>Cost Price (Wholesale / Stitching)</label><input type="number" step="0.01" value={form.cost_price} onChange={e => update('cost_price', e.target.value)} /></div>
+          </div>
+          <div className="form-row">
+            <div className="form-group"><label>Base GST % (HSN default)</label><input type="number" value={form.tax_rate} onChange={e => update('tax_rate', e.target.value)} /></div>
+            {!isEdit && (
+              <>
+                <div className="form-group"><label>Initial Stock</label><input type="number" value={form.stock_qty} onChange={e => update('stock_qty', e.target.value)} /></div>
+                <div className="form-group"><label>Unit</label><input value={form.unit} onChange={e => update('unit', e.target.value)} /></div>
+              </>
+            )}
+          </div>
           <div className="modal-actions">
             <button type="button" className="modal-btn secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="modal-btn primary" disabled={saving}>
-              {saving ? '⏳ Saving...' : (isEdit ? '✅ Update' : '✅ Create')}
+              {saving ? '⏳ Saving...' : (isEdit ? '✅ Update' : '✅ Create Garment')}
             </button>
           </div>
         </form>

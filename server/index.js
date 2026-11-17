@@ -22,6 +22,8 @@ if (fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
 }
 
+const { getSetting } = require('./utils/tax');
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -30,12 +32,16 @@ app.get('/api/health', (req, res) => {
 // Store config (public — used by frontend for branding)
 app.get('/api/config', (req, res) => {
   res.json({
-    store_name: process.env.STORE_NAME || 'My Business',
-    store_address: process.env.STORE_ADDRESS || '',
-    store_phone: process.env.STORE_PHONE || '',
-    store_gstin: process.env.STORE_GSTIN || '',
-    currency_symbol: process.env.CURRENCY_SYMBOL || '₹',
-    business_type: process.env.BUSINESS_TYPE || 'retail',
+    store_name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
+    store_address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001'),
+    store_phone: getSetting('STORE_PHONE', '+91 98765 43210'),
+    store_gstin: getSetting('STORE_GSTIN', '08AAAAA0000A1Z5'),
+    gst_mode: getSetting('GST_MODE', 'registered'),
+    currency_symbol: '₹',
+    business_type: 'boutique',
+    bill_prefix: getSetting('BILL_PREFIX', 'AB-'),
+    thermal_width: getSetting('THERMAL_WIDTH', '80mm'),
+    footer_text: getSetting('FOOTER_TEXT', 'Thank you for shopping with us!')
   });
 });
 
@@ -50,6 +56,7 @@ app.use('/api/suppliers', authMiddleware, require('./routes/suppliers'));
 app.use('/api/purchase-orders', authMiddleware, require('./routes/purchaseOrders'));
 app.use('/api/custom-orders', authMiddleware, require('./routes/customOrders'));
 app.use('/api/credit-notes', authMiddleware, require('./routes/creditNotes'));
+app.use('/api/settings', authMiddleware, require('./routes/settings'));
 
 // ── Database Backup (supervisor only) ──
 const { performBackup } = require('./utils/backup');

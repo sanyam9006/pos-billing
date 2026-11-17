@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../utils/auth');
+const { logAudit } = require('../utils/audit');
 
 // GET /api/products/scan/:barcode
 router.get('/scan/:barcode', (req, res) => {
@@ -27,16 +28,18 @@ router.get('/search', (req, res) => {
     return res.status(400).json({ error: 'Search query required' });
   }
 
-  const products = db.prepare(
-    'SELECT * FROM products WHERE is_active = 1 AND (name LIKE ? OR sku LIKE ? OR barcode LIKE ?) LIMIT 20'
-  ).all(`%${q}%`, `%${q}%`, `%${q}%`);
+  const products = db.prepare(`
+    SELECT * FROM products
+    WHERE is_active = 1 AND (name LIKE ? OR sku LIKE ? OR barcode LIKE ? OR variant_size LIKE ? OR variant_color LIKE ?)
+    LIMIT 30
+  `).all(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
 
   res.json(products);
 });
 
 // GET /api/products — list all
 router.get('/', (req, res) => {
-  const products = db.prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY category, name').all();
+  const products = db.prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY category, name, variant_size').all();
   res.json(products);
 });
 
@@ -82,7 +85,7 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
         p.category,
         p.mrp,
         p.selling_price,
-        p.hsn_code || null,
+        p.hsn_code || '6204',
         p.tax_rate ?? 5,
         p.stock_qty ?? 0,
         p.unit || 'pcs',
@@ -96,6 +99,14 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
 
   insertAll(products);
 
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'batch_create_variants',
+    entity_type: 'product_batch',
+    details: { count: createdIds.length }
+  });
+
   res.status(201).json({
     success: true,
     count: createdIds.length,
@@ -105,24 +116,43 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
 
 // ── POST /api/products — Create product (supervisor only) ──
 router.post('/', requireRole('supervisor'), (req, res) => {
-  const { sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate = 5, stock_qty = 0, unit = 'pcs' } = req.body;
+  const {
+    sku, barcode, name, category, mrp, selling_price, hsn_code,
+    tax_rate = 5, stock_qty = 0, unit = 'pcs', variant_size, variant_color, cost_price = 0
+  } = req.body;
 
   if (!sku || !barcode || !name || !category || mrp === undefined || mrp === null || selling_price === undefined || selling_price === null) {
     return res.status(400).json({ error: 'Required fields: sku, barcode, name, category, mrp, selling_price' });
   }
 
-  // Check uniqueness
   const existingSku = db.prepare('SELECT id FROM products WHERE sku = ?').get(sku);
   if (existingSku) return res.status(409).json({ error: `SKU "${sku}" already exists` });
 
   const existingBarcode = db.prepare('SELECT id FROM products WHERE barcode = ?').get(barcode);
   if (existingBarcode) return res.status(409).json({ error: `Barcode "${barcode}" already exists` });
 
-  const result = db.prepare(
-    'INSERT INTO products (sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate, stock_qty, unit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(sku, barcode, name, category, mrp, selling_price, hsn_code || null, tax_rate, stock_qty, unit);
+  const result = db.prepare(`
+    INSERT INTO products (
+      sku, barcode, name, category, mrp, selling_price, hsn_code,
+      tax_rate, stock_qty, unit, variant_size, variant_color, cost_price
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    sku, barcode, name, category, mrp, selling_price,
+    hsn_code || '6204', tax_rate, stock_qty, unit,
+    variant_size || null, variant_color || null, Number(cost_price) || 0
+  );
 
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(result.lastInsertRowid);
+
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'create_product',
+    entity_type: 'product',
+    entity_id: product.id,
+    details: { sku, name, selling_price, mrp }
+  });
+
   res.status(201).json(product);
 });
 
@@ -131,7 +161,7 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const { name, category, mrp, selling_price, hsn_code, tax_rate, unit } = req.body;
+  const { name, category, mrp, selling_price, hsn_code, tax_rate, unit, variant_size, variant_color, cost_price } = req.body;
 
   db.prepare(`
     UPDATE products SET
@@ -141,11 +171,29 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
       selling_price = COALESCE(?, selling_price),
       hsn_code = COALESCE(?, hsn_code),
       tax_rate = COALESCE(?, tax_rate),
-      unit = COALESCE(?, unit)
+      unit = COALESCE(?, unit),
+      variant_size = COALESCE(?, variant_size),
+      variant_color = COALESCE(?, variant_color),
+      cost_price = COALESCE(?, cost_price)
     WHERE id = ?
-  `).run(name || null, category || null, mrp ?? null, selling_price ?? null, hsn_code || null, tax_rate ?? null, unit || null, req.params.id);
+  `).run(
+    name || null, category || null, mrp ?? null, selling_price ?? null,
+    hsn_code || null, tax_rate ?? null, unit || null,
+    variant_size ?? null, variant_color ?? null, cost_price ?? null,
+    req.params.id
+  );
 
   const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'update_product',
+    entity_type: 'product',
+    entity_id: product.id,
+    details: { old: product, updated }
+  });
+
   res.json(updated);
 });
 
@@ -155,6 +203,16 @@ router.delete('/:id', requireRole('supervisor'), (req, res) => {
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
   db.prepare('UPDATE products SET is_active = 0 WHERE id = ?').run(req.params.id);
+
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'deactivate_product',
+    entity_type: 'product',
+    entity_id: product.id,
+    details: { name: product.name }
+  });
+
   res.json({ success: true, message: `Product "${product.name}" deactivated` });
 });
 
@@ -163,22 +221,31 @@ router.put('/:id/stock', requireRole('supervisor'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const { adjustment, set: setQty } = req.body;
+  const { adjustment, set: setQty, reason } = req.body;
 
+  let newQty;
   if (setQty !== undefined && setQty !== null) {
-    // Absolute set
     if (setQty < 0) return res.status(400).json({ error: 'Stock cannot be negative' });
-    db.prepare('UPDATE products SET stock_qty = ? WHERE id = ?').run(setQty, req.params.id);
+    newQty = Number(setQty);
   } else if (adjustment !== undefined && adjustment !== null) {
-    // Relative adjustment
-    const newQty = product.stock_qty + adjustment;
+    newQty = product.stock_qty + Number(adjustment);
     if (newQty < 0) return res.status(400).json({ error: `Adjustment would result in negative stock (current: ${product.stock_qty})` });
-    db.prepare('UPDATE products SET stock_qty = ? WHERE id = ?').run(newQty, req.params.id);
   } else {
     return res.status(400).json({ error: 'Provide "adjustment" (relative) or "set" (absolute) value' });
   }
 
+  db.prepare('UPDATE products SET stock_qty = ? WHERE id = ?').run(newQty, req.params.id);
   const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'adjust_stock',
+    entity_type: 'product',
+    entity_id: product.id,
+    details: { old_qty: product.stock_qty, new_qty: newQty, reason }
+  });
+
   res.json(updated);
 });
 
