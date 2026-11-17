@@ -69,48 +69,48 @@ insertCoupon.run('WELCOME10', 'percent', 10, 1000, 300, '2026-01-01', '2026-12-3
 insertCoupon.run('FESTIVE500', 'flat', 500, 3500, null, '2026-01-01', '2026-12-31', 1);
 insertCoupon.run('SEASON20', 'percent', 20, 5000, 1500, '2026-03-01', '2026-06-30', 1);
 
-// ── Boutique Apparel Products (Slab <= 2500 -> 5% GST; Slab > 2500 -> 18% GST) ──
+// ── Boutique Apparel Products (Strictly MRP / Tag Price — No Tax) ──
 const insertProduct = db.prepare(`
   INSERT INTO products (
     sku, barcode, name, category, mrp, selling_price,
     hsn_code, tax_rate, stock_qty, unit, variant_size, variant_color, cost_price
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)
 `);
 
-// 1. Kurtis & Tunics (Under Rs 2,500 -> 5% GST Slab)
-insertProduct.run('KRT-COT-S-BLU', '8907001001', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, '6204', 5, 25, 'pcs', 'S', 'Indigo Blue', 650);
-insertProduct.run('KRT-COT-M-BLU', '8907001002', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, '6204', 5, 30, 'pcs', 'M', 'Indigo Blue', 650);
-insertProduct.run('KRT-COT-L-BLU', '8907001003', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, '6204', 5, 20, 'pcs', 'L', 'Indigo Blue', 650);
-insertProduct.run('KRT-COT-XL-BLU', '8907001004', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, '6204', 5, 15, 'pcs', 'XL', 'Indigo Blue', 650);
+// 1. Kurtis & Tunics
+insertProduct.run('KRT-COT-S-BLU', '8907001001', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, 25, 'pcs', 'S', 'Indigo Blue', 650);
+insertProduct.run('KRT-COT-M-BLU', '8907001002', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, 30, 'pcs', 'M', 'Indigo Blue', 650);
+insertProduct.run('KRT-COT-L-BLU', '8907001003', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, 20, 'pcs', 'L', 'Indigo Blue', 650);
+insertProduct.run('KRT-COT-XL-BLU', '8907001004', 'Cotton Printed Anarkali Kurti', 'Kurtis', 1499, 1299, 15, 'pcs', 'XL', 'Indigo Blue', 650);
 
-insertProduct.run('KRT-CHI-M-PNK', '8907001005', 'Chikankari Handwork Kurti', 'Kurtis', 2199, 1999, '6204', 5, 18, 'pcs', 'M', 'Blush Pink', 950);
-insertProduct.run('KRT-CHI-L-PNK', '8907001006', 'Chikankari Handwork Kurti', 'Kurtis', 2199, 1999, '6204', 5, 12, 'pcs', 'L', 'Blush Pink', 950);
+insertProduct.run('KRT-CHI-M-PNK', '8907001005', 'Chikankari Handwork Kurti', 'Kurtis', 2199, 1999, 18, 'pcs', 'M', 'Blush Pink', 950);
+insertProduct.run('KRT-CHI-L-PNK', '8907001006', 'Chikankari Handwork Kurti', 'Kurtis', 2199, 1999, 12, 'pcs', 'L', 'Blush Pink', 950);
 
-insertProduct.run('KRT-BND-S-YEL', '8907001007', 'Jaipuri Bandhani Daily Kurti', 'Kurtis', 999, 899, '6204', 5, 40, 'pcs', 'S', 'Mustard Yellow', 400);
-insertProduct.run('KRT-BND-M-YEL', '8907001008', 'Jaipuri Bandhani Daily Kurti', 'Kurtis', 999, 899, '6204', 5, 35, 'pcs', 'M', 'Mustard Yellow', 400);
+insertProduct.run('KRT-BND-S-YEL', '8907001007', 'Jaipuri Bandhani Daily Kurti', 'Kurtis', 999, 899, 40, 'pcs', 'S', 'Mustard Yellow', 400);
+insertProduct.run('KRT-BND-M-YEL', '8907001008', 'Jaipuri Bandhani Daily Kurti', 'Kurtis', 999, 899, 35, 'pcs', 'M', 'Mustard Yellow', 400);
 
-// 2. Co-ord Sets & Festive Ensembles (Around & Over Rs 2,500 threshold)
-insertProduct.run('CRD-LNN-S-SGE', '8907002001', 'Pure Linen Embroidered Co-ord Set', 'Co-ords', 2899, 2499, '6204', 5, 15, 'pcs', 'S', 'Sage Green', 1200); // 2499 <= 2500 -> 5%
-insertProduct.run('CRD-LNN-M-SGE', '8907002002', 'Pure Linen Embroidered Co-ord Set', 'Co-ords', 2899, 2699, '6204', 18, 14, 'pcs', 'M', 'Sage Green', 1300); // 2699 > 2500 -> 18%
-insertProduct.run('CRD-SILK-M-MRN', '8907002003', 'Chanderi Silk Festive 3-Piece Set', 'Festive Sets', 3999, 3499, '6204', 18, 10, 'pcs', 'M', 'Maroon', 1700); // 3499 > 2500 -> 18%
-insertProduct.run('CRD-SILK-L-MRN', '8907002004', 'Chanderi Silk Festive 3-Piece Set', 'Festive Sets', 3999, 3499, '6204', 18, 8, 'pcs', 'L', 'Maroon', 1700);
+// 2. Co-ord Sets & Festive Ensembles
+insertProduct.run('CRD-LNN-S-SGE', '8907002001', 'Pure Linen Embroidered Co-ord Set', 'Co-ords', 2899, 2499, 15, 'pcs', 'S', 'Sage Green', 1200);
+insertProduct.run('CRD-LNN-M-SGE', '8907002002', 'Pure Linen Embroidered Co-ord Set', 'Co-ords', 2899, 2699, 14, 'pcs', 'M', 'Sage Green', 1300);
+insertProduct.run('CRD-SILK-M-MRN', '8907002003', 'Chanderi Silk Festive 3-Piece Set', 'Festive Sets', 3999, 3499, 10, 'pcs', 'M', 'Maroon', 1700);
+insertProduct.run('CRD-SILK-L-MRN', '8907002004', 'Chanderi Silk Festive 3-Piece Set', 'Festive Sets', 3999, 3499, 8, 'pcs', 'L', 'Maroon', 1700);
 
 // 3. Sarees & Drapes
-insertProduct.run('SA-MUL-GRN', '8907003001', 'Mulmul Cotton Handblock Saree', 'Sarees', 2199, 1850, '5208', 5, 20, 'pcs', 'Free', 'Emerald Green', 900);
-insertProduct.run('SA-ORG-LAV', '8907003002', 'Organza Floral Zari Border Saree', 'Sarees', 3499, 2999, '5407', 18, 12, 'pcs', 'Free', 'Lavender', 1450);
-insertProduct.run('SA-BAN-RED', '8907003003', 'Banarasi Katan Silk Bridal Saree', 'Bridal & Occasion', 8999, 7999, '5007', 18, 6, 'pcs', 'Free', 'Sindoor Red', 4200);
+insertProduct.run('SA-MUL-GRN', '8907003001', 'Mulmul Cotton Handblock Saree', 'Sarees', 2199, 1850, 20, 'pcs', 'Free', 'Emerald Green', 900);
+insertProduct.run('SA-ORG-LAV', '8907003002', 'Organza Floral Zari Border Saree', 'Sarees', 3499, 2999, 12, 'pcs', 'Free', 'Lavender', 1450);
+insertProduct.run('SA-BAN-RED', '8907003003', 'Banarasi Katan Silk Bridal Saree', 'Bridal & Occasion', 8999, 7999, 6, 'pcs', 'Free', 'Sindoor Red', 4200);
 
-// 4. Dupattas & Stoles (Under Rs 2,500)
-insertProduct.run('DUP-KTH-RED', '8907004001', 'Kantha Stitch Tussar Dupatta', 'Dupattas', 1299, 999, '6214', 5, 25, 'pcs', 'Free', 'Rust Red', 480);
-insertProduct.run('DUP-PHU-MLT', '8907004002', 'Hand Embroidered Phulkari Dupatta', 'Dupattas', 1799, 1499, '6214', 5, 15, 'pcs', 'Free', 'Multi', 750);
+// 4. Dupattas & Stoles
+insertProduct.run('DUP-KTH-RED', '8907004001', 'Kantha Stitch Tussar Dupatta', 'Dupattas', 1299, 999, 25, 'pcs', 'Free', 'Rust Red', 480);
+insertProduct.run('DUP-PHU-MLT', '8907004002', 'Hand Embroidered Phulkari Dupatta', 'Dupattas', 1799, 1499, 15, 'pcs', 'Free', 'Multi', 750);
 
 // ── Suppliers ──
 const insertSupplier = db.prepare(`
-  INSERT INTO suppliers (name, contact_person, phone, email, gstin, address)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT INTO suppliers (name, contact_person, phone, email, address)
+  VALUES (?, ?, ?, ?, ?)
 `);
-insertSupplier.run('Jaipur Handloom Weavers Hub', 'Ramesh Chander', '+91 94140 12345', 'info@jaipurweavers.com', '08AAACH1234F1Z8', 'Sanganer Industrial Area, Jaipur');
-insertSupplier.run('Varanasi Katan Silks', 'Mahesh Narayan', '+91 94150 98765', 'sales@katansilks.in', '09AABCK5432D1Z3', 'Chowk, Varanasi, UP');
+insertSupplier.run('Jaipur Handloom Weavers Hub', 'Ramesh Chander', '+91 94140 12345', 'info@jaipurweavers.com', 'Sanganer Industrial Area, Jaipur');
+insertSupplier.run('Varanasi Katan Silks', 'Mahesh Narayan', '+91 94150 98765', 'sales@katansilks.in', 'Chowk, Varanasi, UP');
 
 // ── Custom Orders (Tailoring & Alterations) ──
 const insertCustom = db.prepare(`

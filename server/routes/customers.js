@@ -67,9 +67,9 @@ router.post('/:id/redeem', (req, res) => {
   if (txn_id) {
     const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txn_id);
     const newDiscount = (txn.total_discount || 0) + discount;
-    const grandTotal = Math.max(0, Math.round((txn.subtotal - newDiscount + txn.tax_amount) * 100) / 100);
+    const grandTotal = Math.max(0, Math.round((txn.subtotal - newDiscount) * 100) / 100);
 
-    db.prepare('UPDATE transactions SET total_discount = ?, grand_total = ? WHERE id = ?')
+    db.prepare('UPDATE transactions SET total_discount = ?, tax_amount = 0, grand_total = ? WHERE id = ?')
       .run(newDiscount, grandTotal, txn_id);
   }
 

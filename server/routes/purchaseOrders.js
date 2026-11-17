@@ -30,7 +30,7 @@ router.get('/', requireRole('supervisor'), (req, res) => {
 // ── GET /api/purchase-orders/:id — Get single PO with items (supervisor only) ──
 router.get('/:id', requireRole('supervisor'), (req, res) => {
   const po = db.prepare(`
-    SELECT po.*, s.name as supplier_name, s.contact_person, s.phone as supplier_phone, s.email as supplier_email, s.gstin as supplier_gstin
+    SELECT po.*, s.name as supplier_name, s.contact_person, s.phone as supplier_phone, s.email as supplier_email
     FROM purchase_orders po
     JOIN suppliers s ON po.supplier_id = s.id
     WHERE po.id = ?

@@ -4,6 +4,12 @@ const db = require('../db');
 const { requireRole } = require('../utils/auth');
 const { logAudit } = require('../utils/audit');
 
+function sanitizeProduct(p) {
+  if (!p) return p;
+  const { tax_rate, hsn_code, ...rest } = p;
+  return rest;
+}
+
 // GET /api/products/scan/:barcode
 router.get('/scan/:barcode', (req, res) => {
   const product = db.prepare(
@@ -14,11 +20,12 @@ router.get('/scan/:barcode', (req, res) => {
     return res.status(404).json({ error: 'Item not found — try manual entry' });
   }
 
+  const clean = sanitizeProduct(product);
   if (product.stock_qty <= 0) {
-    return res.json({ ...product, warning: 'Item is out of stock' });
+    return res.json({ ...clean, warning: 'Item is out of stock' });
   }
 
-  res.json(product);
+  res.json(clean);
 });
 
 // GET /api/products/search?q=
@@ -34,13 +41,13 @@ router.get('/search', (req, res) => {
     LIMIT 30
   `).all(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
 
-  res.json(products);
+  res.json(products.map(sanitizeProduct));
 });
 
 // GET /api/products — list all
 router.get('/', (req, res) => {
   const products = db.prepare('SELECT * FROM products WHERE is_active = 1 ORDER BY category, name, variant_size').all();
-  res.json(products);
+  res.json(products.map(sanitizeProduct));
 });
 
 // ── POST /api/products/batch — Bulk create products / matrix variants (supervisor only) ──
@@ -72,7 +79,7 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
 
   const insertProduct = db.prepare(`
     INSERT INTO products (sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate, stock_qty, unit, variant_size, variant_color, cost_price)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)
   `);
 
   const createdIds = [];
@@ -85,8 +92,6 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
         p.category,
         p.mrp,
         p.selling_price,
-        p.hsn_code || '6204',
-        p.tax_rate ?? 5,
         p.stock_qty ?? 0,
         p.unit || 'pcs',
         p.variant_size || null,
@@ -117,8 +122,8 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
 // ── POST /api/products — Create product (supervisor only) ──
 router.post('/', requireRole('supervisor'), (req, res) => {
   const {
-    sku, barcode, name, category, mrp, selling_price, hsn_code,
-    tax_rate = 5, stock_qty = 0, unit = 'pcs', variant_size, variant_color, cost_price = 0
+    sku, barcode, name, category, mrp, selling_price,
+    stock_qty = 0, unit = 'pcs', variant_size, variant_color, cost_price = 0
   } = req.body;
 
   if (!sku || !barcode || !name || !category || mrp === undefined || mrp === null || selling_price === undefined || selling_price === null) {
@@ -135,10 +140,10 @@ router.post('/', requireRole('supervisor'), (req, res) => {
     INSERT INTO products (
       sku, barcode, name, category, mrp, selling_price, hsn_code,
       tax_rate, stock_qty, unit, variant_size, variant_color, cost_price
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)
   `).run(
     sku, barcode, name, category, mrp, selling_price,
-    hsn_code || '6204', tax_rate, stock_qty, unit,
+    stock_qty, unit,
     variant_size || null, variant_color || null, Number(cost_price) || 0
   );
 
@@ -153,7 +158,7 @@ router.post('/', requireRole('supervisor'), (req, res) => {
     details: { sku, name, selling_price, mrp }
   });
 
-  res.status(201).json(product);
+  res.status(201).json(sanitizeProduct(product));
 });
 
 // ── PUT /api/products/:id — Update product (supervisor only) ──
@@ -161,7 +166,7 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
   const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
   if (!product) return res.status(404).json({ error: 'Product not found' });
 
-  const { name, category, mrp, selling_price, hsn_code, tax_rate, unit, variant_size, variant_color, cost_price } = req.body;
+  const { name, category, mrp, selling_price, unit, variant_size, variant_color, cost_price } = req.body;
 
   db.prepare(`
     UPDATE products SET
@@ -169,8 +174,8 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
       category = COALESCE(?, category),
       mrp = COALESCE(?, mrp),
       selling_price = COALESCE(?, selling_price),
-      hsn_code = COALESCE(?, hsn_code),
-      tax_rate = COALESCE(?, tax_rate),
+      hsn_code = NULL,
+      tax_rate = 0,
       unit = COALESCE(?, unit),
       variant_size = COALESCE(?, variant_size),
       variant_color = COALESCE(?, variant_color),
@@ -178,7 +183,7 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
     WHERE id = ?
   `).run(
     name || null, category || null, mrp ?? null, selling_price ?? null,
-    hsn_code || null, tax_rate ?? null, unit || null,
+    unit || null,
     variant_size ?? null, variant_color ?? null, cost_price ?? null,
     req.params.id
   );
@@ -194,7 +199,7 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
     details: { old: product, updated }
   });
 
-  res.json(updated);
+  res.json(sanitizeProduct(updated));
 });
 
 // ── DELETE /api/products/:id — Soft-delete product (supervisor only) ──
@@ -246,7 +251,7 @@ router.put('/:id/stock', requireRole('supervisor'), (req, res) => {
     details: { old_qty: product.stock_qty, new_qty: newQty, reason }
   });
 
-  res.json(updated);
+  res.json(sanitizeProduct(updated));
 });
 
 module.exports = router;

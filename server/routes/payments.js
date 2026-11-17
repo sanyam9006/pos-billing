@@ -1,8 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { getSetting } = require('../utils/tax');
+const { getSetting } = require('../utils/settings');
 const { logAudit } = require('../utils/audit');
+
+// ── Helper: sanitize transaction object (strip tax columns) ──
+function sanitizeTxn(txn) {
+  if (!txn) return txn;
+  const { tax_amount, is_interstate, ...rest } = txn;
+  return rest;
+}
 
 // ── Helper: process store credit redemption ──
 function redeemStoreCredit(noteNumber, amount) {
@@ -81,7 +88,7 @@ router.post('/', (req, res) => {
   }
 
   res.json({
-    ...updatedTxn,
+    ...sanitizeTxn(updatedTxn),
     payments,
     change: changeAmount,
     fully_paid: updatedTxn.status === 'completed'
@@ -147,7 +154,7 @@ router.post('/split', (req, res) => {
     details: { grand_total: updatedTxn.grand_total, payments: allPayments }
   });
 
-  res.json({ ...updatedTxn, payments: allPayments, change: totalChange, fully_paid: true });
+  res.json({ ...sanitizeTxn(updatedTxn), payments: allPayments, change: totalChange, fully_paid: true });
 });
 
 // ── GET /api/payments/receipt/:txnId — Get receipt data ──
@@ -156,8 +163,10 @@ router.get('/receipt/:txnId', (req, res) => {
   if (!txn) return res.status(404).json({ error: 'Transaction not found' });
 
   const items = db.prepare(`
-    SELECT ti.*, p.name as product_name, p.barcode, p.sku, p.category,
-           p.hsn_code as product_hsn, p.variant_size, p.variant_color
+    SELECT ti.id, ti.txn_id, ti.product_id, ti.quantity, ti.unit_price, ti.discount,
+           ti.line_total, ti.is_return, ti.discount_reason, ti.created_at,
+           p.name as product_name, p.barcode, p.sku, p.category,
+           p.variant_size, p.variant_color, p.mrp
     FROM transaction_items ti
     JOIN products p ON ti.product_id = p.id
     WHERE ti.txn_id = ?
@@ -173,85 +182,16 @@ router.get('/receipt/:txnId', (req, res) => {
     ? db.prepare('SELECT code, type, value FROM coupons WHERE id = ?').get(txn.coupon_id)
     : null;
 
-  const gstMode = getSetting('GST_MODE', 'registered');
-  const isRegistered = gstMode === 'registered';
-  const isInterstate = Boolean(txn.is_interstate);
-
   const storeInfo = {
     name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
     address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001'),
     phone: getSetting('STORE_PHONE', '+91 98765 43210'),
-    gstin: isRegistered ? getSetting('STORE_GSTIN', '08AAAAA0000A1Z5') : null,
-    state_code: isRegistered ? getSetting('STATE_CODE', '08') : null,
     footer_text: getSetting('FOOTER_TEXT', 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact.'),
     thermal_width: getSetting('THERMAL_WIDTH', '80mm')
   };
 
-  // Build GST tax summary by HSN & rate (only if registered)
-  const taxSummaryMap = {};
-  let totalCGST = 0;
-  let totalSGST = 0;
-  let totalIGST = 0;
-
-  for (const item of items) {
-    const rate = Number(item.tax_rate) || 5.0;
-    const hsn = item.hsn_code || item.product_hsn || '6204';
-    const key = `${hsn}_${rate}`;
-
-    const lineTotal = Number(item.line_total);
-    const taxInc = Number(item.tax_included || item.tax || 0);
-    const taxableVal = Math.round((lineTotal - taxInc) * 100) / 100;
-
-    let itemCGST = 0;
-    let itemSGST = 0;
-    let itemIGST = 0;
-
-    if (isInterstate) {
-      itemIGST = taxInc;
-      totalIGST += itemIGST;
-    } else {
-      itemCGST = Math.round((taxInc / 2) * 100) / 100;
-      itemSGST = Math.round((taxInc - itemCGST) * 100) / 100;
-      totalCGST += itemCGST;
-      totalSGST += itemSGST;
-    }
-
-    if (!taxSummaryMap[key]) {
-      taxSummaryMap[key] = {
-        hsn,
-        tax_rate: rate,
-        taxable_value: 0,
-        cgst_rate: isInterstate ? 0 : rate / 2,
-        cgst_amount: 0,
-        sgst_rate: isInterstate ? 0 : rate / 2,
-        sgst_amount: 0,
-        igst_rate: isInterstate ? rate : 0,
-        igst_amount: 0,
-        total_tax: 0
-      };
-    }
-
-    taxSummaryMap[key].taxable_value += taxableVal;
-    taxSummaryMap[key].cgst_amount += itemCGST;
-    taxSummaryMap[key].sgst_amount += itemSGST;
-    taxSummaryMap[key].igst_amount += itemIGST;
-    taxSummaryMap[key].total_tax += taxInc;
-  }
-
-  const tax_summary = Object.values(taxSummaryMap).map(ts => ({
-    ...ts,
-    taxable_value: Math.round(ts.taxable_value * 100) / 100,
-    cgst_amount: Math.round(ts.cgst_amount * 100) / 100,
-    sgst_amount: Math.round(ts.sgst_amount * 100) / 100,
-    igst_amount: Math.round(ts.igst_amount * 100) / 100,
-    total_tax: Math.round(ts.total_tax * 100) / 100
-  }));
-
   res.json({
-    invoice_title: isRegistered ? 'TAX INVOICE' : 'BILL OF SUPPLY',
-    gst_mode: gstMode,
-    is_registered: isRegistered,
-    is_interstate: isInterstate,
+    bill_title: 'Bill',
     store: storeInfo,
     bill_number: txn.bill_number,
     transaction_type: txn.transaction_type || 'sale',
@@ -265,11 +205,6 @@ router.get('/receipt/:txnId', (req, res) => {
     discount: txn.total_discount,
     discount_reason: txn.discount_reason,
     coupon,
-    tax_amount: isRegistered ? txn.tax_amount : 0,
-    cgst: isRegistered && !isInterstate ? Math.round(totalCGST * 100) / 100 : 0,
-    sgst: isRegistered && !isInterstate ? Math.round(totalSGST * 100) / 100 : 0,
-    igst: isRegistered && isInterstate ? Math.round(totalIGST * 100) / 100 : 0,
-    tax_summary: isRegistered ? tax_summary : [],
     grand_total: txn.grand_total,
     payments,
     loyalty_earned: customer ? Math.floor(txn.grand_total / 100) : 0

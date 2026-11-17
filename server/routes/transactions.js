@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { calculateInclusiveTax, getSetting } = require('../utils/tax');
+const { getSetting } = require('../utils/settings');
 const { verifyPin } = require('../utils/auth');
 const { logAudit } = require('../utils/audit');
 
@@ -23,16 +23,21 @@ const generateBillNumber = db.transaction(() => {
   return `${prefix}${dateStr}-${String(row.seq).padStart(4, '0')}`;
 });
 
-// ── Helper: recalculate transaction totals (Strictly Tax-Inclusive) ──
-// Customer pays ONLY the MRP/tag price minus discounts. Tax is NEVER added on top.
+// ── Helper: sanitize transaction object to ensure zero tax fields in API responses ──
+function sanitizeTxn(txn) {
+  if (!txn) return txn;
+  const { tax_amount, is_interstate, ...rest } = txn;
+  return rest;
+}
+
+// ── Helper: recalculate transaction totals strictly at MRP / selling price ──
+// Customer pays ONLY selling_price * qty - discounts.
 function recalcTotals(txnId) {
-  const items = db.prepare('SELECT * FROM transaction_items WHERE txn_id = ?').all(txnId);
+  const items = db.prepare('SELECT line_total FROM transaction_items WHERE txn_id = ?').all(txnId);
   let subtotal = 0;
-  let totalTaxIncluded = 0;
 
   for (const item of items) {
     subtotal += Number(item.line_total || 0);
-    totalTaxIncluded += Number(item.tax_included || item.tax || 0);
   }
 
   const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txnId);
@@ -50,26 +55,26 @@ function recalcTotals(txnId) {
     }
   }
 
-  // Rounding to 2 decimals using integer paise
   const subtotalRounded = Math.round(subtotal * 100) / 100;
   const discountRounded = Math.round(totalDiscount * 100) / 100;
-  const taxRounded = Math.round(totalTaxIncluded * 100) / 100;
   const grandTotal = Math.max(0, Math.round((subtotalRounded - discountRounded) * 100) / 100);
 
   db.prepare(`
     UPDATE transactions
-    SET subtotal = ?, total_discount = ?, tax_amount = ?, grand_total = ?
+    SET subtotal = ?, total_discount = ?, tax_amount = 0, grand_total = ?
     WHERE id = ?
-  `).run(subtotalRounded, discountRounded, taxRounded, grandTotal, txnId);
+  `).run(subtotalRounded, discountRounded, grandTotal, txnId);
 
-  return db.prepare('SELECT * FROM transactions WHERE id = ?').get(txnId);
+  return sanitizeTxn(db.prepare('SELECT * FROM transactions WHERE id = ?').get(txnId));
 }
 
-// ── Helper: fetch transaction items with product info ──
+// ── Helper: fetch transaction items with product info (no tax/HSN fields) ──
 function getItemsWithProducts(txnId) {
   return db.prepare(`
-    SELECT ti.*, p.name as product_name, p.barcode, p.sku, p.category,
-           p.hsn_code as product_hsn, p.variant_size, p.variant_color, p.stock_qty
+    SELECT ti.id, ti.txn_id, ti.product_id, ti.quantity, ti.unit_price, ti.discount,
+           ti.line_total, ti.is_return, ti.discount_reason, ti.created_at,
+           p.name as product_name, p.barcode, p.sku, p.category,
+           p.variant_size, p.variant_color, p.stock_qty
     FROM transaction_items ti
     JOIN products p ON ti.product_id = p.id
     WHERE ti.txn_id = ?
@@ -82,7 +87,6 @@ function checkDiscountApproval(amount, supervisorPin, cashier) {
   const threshold = Number(getSetting('DISCOUNT_PIN_THRESHOLD', 500));
   if (amount <= threshold) return { approved: true };
 
-  // If the logged in cashier is already supervisor, approved
   if (cashier && cashier.role === 'supervisor') {
     return { approved: true, approved_by: cashier.id };
   }
@@ -94,7 +98,6 @@ function checkDiscountApproval(amount, supervisorPin, cashier) {
     };
   }
 
-  // Look up supervisor accounts
   const supervisors = db.prepare("SELECT id, pin FROM cashiers WHERE role = 'supervisor' AND is_active = 1").all();
   const validSup = supervisors.find(s => verifyPin(supervisorPin, s.pin));
   if (!validSup) {
@@ -106,17 +109,17 @@ function checkDiscountApproval(amount, supervisorPin, cashier) {
 
 // ── POST /api/transactions — Create new bill ──
 router.post('/', (req, res) => {
-  const { cashier_id, counter_number = 1, is_interstate = 0 } = req.body;
+  const { cashier_id, counter_number = 1 } = req.body;
   const activeCashierId = cashier_id || req.cashier?.id;
   if (!activeCashierId) return res.status(400).json({ error: 'Cashier ID required' });
 
   const billNumber = generateBillNumber();
   const result = db.prepare(
-    'INSERT INTO transactions (bill_number, cashier_id, counter_number, is_interstate) VALUES (?, ?, ?, ?)'
-  ).run(billNumber, activeCashierId, counter_number, is_interstate ? 1 : 0);
+    'INSERT INTO transactions (bill_number, cashier_id, counter_number) VALUES (?, ?, ?)'
+  ).run(billNumber, activeCashierId, counter_number);
 
   const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(result.lastInsertRowid);
-  res.json(txn);
+  res.json(sanitizeTxn(txn));
 });
 
 // ── GET /api/transactions/active/:cashierId — Restore active transaction after refresh ──
@@ -129,13 +132,13 @@ router.get('/active/:cashierId', (req, res) => {
 
   const items = getItemsWithProducts(txn.id);
   const customer = txn.customer_id
-    ? db.prepare('SELECT * FROM customers WHERE id = ?').get(txn.customer_id)
+    ? db.prepare('SELECT id, name, phone, email, loyalty_points, membership_tier FROM customers WHERE id = ?').get(txn.customer_id)
     : null;
   const coupon = txn.coupon_id
     ? db.prepare('SELECT * FROM coupons WHERE id = ?').get(txn.coupon_id)
     : null;
 
-  res.json({ ...txn, items, customer, coupon });
+  res.json({ ...sanitizeTxn(txn), items, customer, coupon });
 });
 
 // ── GET /api/transactions/bill/:billNumber — Lookup by bill number ──
@@ -145,10 +148,10 @@ router.get('/bill/:billNumber', (req, res) => {
 
   const items = getItemsWithProducts(txn.id);
   const customer = txn.customer_id
-    ? db.prepare('SELECT * FROM customers WHERE id = ?').get(txn.customer_id)
+    ? db.prepare('SELECT id, name, phone, email, loyalty_points, membership_tier FROM customers WHERE id = ?').get(txn.customer_id)
     : null;
 
-  res.json({ ...txn, items, customer });
+  res.json({ ...sanitizeTxn(txn), items, customer });
 });
 
 // ── GET /api/transactions/:id — Get transaction with items ──
@@ -158,10 +161,10 @@ router.get('/:id', (req, res) => {
 
   const items = getItemsWithProducts(req.params.id);
   const customer = txn.customer_id
-    ? db.prepare('SELECT * FROM customers WHERE id = ?').get(txn.customer_id)
+    ? db.prepare('SELECT id, name, phone, email, loyalty_points, membership_tier FROM customers WHERE id = ?').get(txn.customer_id)
     : null;
 
-  res.json({ ...txn, items, customer });
+  res.json({ ...sanitizeTxn(txn), items, customer });
 });
 
 // ── POST /api/transactions/:id/items — Add item to bill ──
@@ -201,25 +204,26 @@ router.post('/:id/items', (req, res) => {
     if (existingItem) {
       const newQty = existingItem.quantity + requestedQty;
       const totalDisc = (Number(existingItem.discount) || 0) + itemDiscount;
-      const calc = calculateInclusiveTax(product.selling_price, newQty, totalDisc, product, Boolean(txn.is_interstate));
+      const lineTotalPaise = Math.max(0, Math.round((product.selling_price * newQty - totalDisc) * 100));
+      const newLineTotal = lineTotalPaise / 100;
 
       db.prepare(`
         UPDATE transaction_items
-        SET quantity = ?, discount = ?, tax = ?, tax_included = ?, tax_rate = ?, line_total = ?
+        SET quantity = ?, discount = ?, tax = 0, tax_included = 0, tax_rate = 0, line_total = ?
         WHERE id = ?
-      `).run(newQty, totalDisc, calc.taxIncluded, calc.taxIncluded, calc.taxRate, calc.lineTotal, existingItem.id);
+      `).run(newQty, totalDisc, newLineTotal, existingItem.id);
     } else {
-      const calc = calculateInclusiveTax(product.selling_price, requestedQty, itemDiscount, product, Boolean(txn.is_interstate));
+      const lineTotalPaise = Math.max(0, Math.round((product.selling_price * requestedQty - itemDiscount) * 100));
+      const lineTotal = lineTotalPaise / 100;
 
       db.prepare(`
         INSERT INTO transaction_items (
           txn_id, product_id, quantity, unit_price, discount,
           tax, tax_included, tax_rate, hsn_code, line_total, is_return, discount_reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+        ) VALUES (?, ?, ?, ?, ?, 0, 0, 0, NULL, ?, 0, ?)
       `).run(
         txnId, product_id, requestedQty, product.selling_price, itemDiscount,
-        calc.taxIncluded, calc.taxIncluded, calc.taxRate, product.hsn_code || '6204',
-        calc.lineTotal, discount_reason || null
+        lineTotal, discount_reason || null
       );
     }
 
@@ -284,13 +288,14 @@ router.put('/:id/items/:itemId', (req, res) => {
       }
     } else {
       const product = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
-      const calc = calculateInclusiveTax(product.selling_price, newQty, newDiscount, product, Boolean(txn.is_interstate));
+      const lineTotalPaise = Math.max(0, Math.round((product.selling_price * newQty - newDiscount) * 100));
+      const newLineTotal = lineTotalPaise / 100;
 
       db.prepare(`
         UPDATE transaction_items
-        SET quantity = ?, discount = ?, tax = ?, tax_included = ?, tax_rate = ?, line_total = ?, discount_reason = ?
+        SET quantity = ?, discount = ?, tax = 0, tax_included = 0, tax_rate = 0, line_total = ?, discount_reason = ?
         WHERE id = ?
-      `).run(newQty, newDiscount, calc.taxIncluded, calc.taxIncluded, calc.taxRate, calc.lineTotal, discount_reason || item.discount_reason, itemId);
+      `).run(newQty, newDiscount, newLineTotal, discount_reason || item.discount_reason, itemId);
 
       if (!item.is_return) {
         db.prepare('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?').run(stockDelta, item.product_id);
@@ -369,33 +374,6 @@ router.post('/:id/discount', (req, res) => {
   res.json({ ...updated, items });
 });
 
-// ── PUT /api/transactions/:id/interstate — Toggle inter-state (IGST) ──
-router.put('/:id/interstate', (req, res) => {
-  const txnId = req.params.id;
-  const { is_interstate } = req.body;
-
-  const txn = db.prepare("SELECT * FROM transactions WHERE id = ? AND status = 'active'").get(txnId);
-  if (!txn) return res.status(404).json({ error: 'Active transaction not found' });
-
-  const interstateVal = is_interstate ? 1 : 0;
-  db.prepare('UPDATE transactions SET is_interstate = ? WHERE id = ?').run(interstateVal, txnId);
-
-  // Recalculate taxes on all items with the new interstate flag
-  const items = db.prepare('SELECT * FROM transaction_items WHERE txn_id = ?').all(txnId);
-  const updateTaxTxn = db.transaction(() => {
-    for (const item of items) {
-      const product = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
-      const calc = calculateInclusiveTax(item.unit_price, item.quantity, item.discount, product, Boolean(interstateVal));
-      db.prepare('UPDATE transaction_items SET tax = ?, tax_included = ?, tax_rate = ? WHERE id = ?')
-        .run(calc.taxIncluded, calc.taxIncluded, calc.taxRate, item.id);
-    }
-  });
-  updateTaxTxn();
-
-  const updated = recalcTotals(txnId);
-  res.json({ ...updated, items: getItemsWithProducts(txnId) });
-});
-
 // ── POST /api/transactions/exchange — Exchange garments in one atomic transaction ──
 router.post('/exchange', (req, res) => {
   const { cashier_id, counter_number = 1, return_items = [], new_items = [], original_bill_number, reason } = req.body;
@@ -424,17 +402,16 @@ router.post('/exchange', (req, res) => {
       if (!product) throw new Error(`Return product ID ${ret.product_id} not found`);
 
       const qty = Math.max(1, parseInt(ret.quantity, 10) || 1);
-      const returnCredit = Number(ret.price || product.selling_price) * qty;
-      const calc = calculateInclusiveTax(ret.price || product.selling_price, qty, 0, product);
+      const unitPrice = Number(ret.price || product.selling_price);
+      const returnCredit = Math.round(unitPrice * qty * 100) / 100;
 
       db.prepare(`
         INSERT INTO transaction_items (
           txn_id, product_id, quantity, unit_price, discount,
           tax, tax_included, tax_rate, hsn_code, line_total, is_return, discount_reason
-        ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 1, ?)
+        ) VALUES (?, ?, ?, ?, 0, 0, 0, 0, NULL, ?, 1, ?)
       `).run(
-        createdTxnId, ret.product_id, qty, ret.price || product.selling_price,
-        -calc.taxIncluded, -calc.taxIncluded, calc.taxRate, product.hsn_code || '6204',
+        createdTxnId, ret.product_id, qty, unitPrice,
         -returnCredit, reason || 'Customer Exchange'
       );
 
@@ -452,17 +429,17 @@ router.post('/exchange', (req, res) => {
         throw new Error(`Insufficient stock for replacement ${product.name}`);
       }
 
-      const calc = calculateInclusiveTax(product.selling_price, qty, 0, product);
+      const unitPrice = Number(product.selling_price);
+      const lineTotal = Math.round(unitPrice * qty * 100) / 100;
 
       db.prepare(`
         INSERT INTO transaction_items (
           txn_id, product_id, quantity, unit_price, discount,
           tax, tax_included, tax_rate, hsn_code, line_total, is_return
-        ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0)
+        ) VALUES (?, ?, ?, ?, 0, 0, 0, 0, NULL, ?, 0)
       `).run(
-        createdTxnId, nItem.product_id, qty, product.selling_price,
-        calc.taxIncluded, calc.taxIncluded, calc.taxRate, product.hsn_code || '6204',
-        calc.lineTotal
+        createdTxnId, nItem.product_id, qty, unitPrice,
+        lineTotal
       );
 
       // Deduct stock for replacement
@@ -499,8 +476,10 @@ router.put('/:id/hold', (req, res) => {
 // ── GET /api/transactions/status/held — List held bills ──
 router.get('/status/held', (req, res) => {
   const held = db.prepare(`
-    SELECT t.*, c.name as cashier_name,
-      (SELECT COUNT(*) FROM transaction_items WHERE txn_id = t.id) as item_count
+    SELECT t.id, t.bill_number, t.cashier_id, t.customer_id, t.subtotal, t.total_discount,
+           t.grand_total, t.status, t.counter_number, t.created_at,
+           c.name as cashier_name,
+           (SELECT COUNT(*) FROM transaction_items WHERE txn_id = t.id) as item_count
     FROM transactions t
     JOIN cashiers c ON t.cashier_id = c.id
     WHERE t.status = 'held'
@@ -514,7 +493,7 @@ router.put('/:id/recall', (req, res) => {
   db.prepare("UPDATE transactions SET status = 'active' WHERE id = ? AND status = 'held'").run(req.params.id);
   const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
   const items = getItemsWithProducts(req.params.id);
-  res.json({ ...txn, items });
+  res.json({ ...sanitizeTxn(txn), items });
 });
 
 // ── POST /api/transactions/:id/coupon — Apply coupon ──
@@ -560,8 +539,8 @@ router.post('/:id/customer', (req, res) => {
   const { customer_id } = req.body;
   db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(customer_id, req.params.id);
   const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
-  const customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(customer_id);
-  res.json({ ...txn, customer });
+  const customer = db.prepare('SELECT id, name, phone, email, loyalty_points, membership_tier FROM customers WHERE id = ?').get(customer_id);
+  res.json({ ...sanitizeTxn(txn), customer });
 });
 
 // ── DELETE /api/transactions/:id — Clear/void entire bill (restore all stock) ──

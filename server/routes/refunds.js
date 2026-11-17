@@ -19,7 +19,6 @@ router.post('/', requireRole('supervisor'), (req, res) => {
   const txnItems = db.prepare('SELECT * FROM transaction_items WHERE txn_id = ?').all(txn_id);
 
   let totalRefund = 0;
-  let totalTaxReversed = 0;
   const refundedItems = [];
 
   for (const refundReq of items) {
@@ -35,25 +34,17 @@ router.post('/', requireRole('supervisor'), (req, res) => {
 
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(txnItem.product_id);
 
-    // In tax-inclusive pricing, the line_total already includes tax and accounts for discounts
-    const unitInclusive = (txnItem.line_total) / (txnItem.quantity || 1);
-    const itemRefundAmount = Math.round(unitInclusive * refundQty * 100) / 100;
-    const rate = Number(txnItem.tax_rate) || 5.0;
-    const taxableReversed = Math.round((itemRefundAmount / (1 + rate / 100)) * 100) / 100;
-    const taxReversed = Math.round((itemRefundAmount - taxableReversed) * 100) / 100;
+    const unitPrice = (txnItem.line_total) / (txnItem.quantity || 1);
+    const itemRefundAmount = Math.round(unitPrice * refundQty * 100) / 100;
 
     totalRefund += itemRefundAmount;
-    totalTaxReversed += taxReversed;
 
     refundedItems.push({
       item_id: txnItem.id,
       product_id: txnItem.product_id,
       product_name: product?.name,
       quantity: refundQty,
-      rate,
-      amount: itemRefundAmount,
-      taxable_reversed: taxableReversed,
-      tax_reversed: taxReversed
+      amount: itemRefundAmount
     });
   }
 
@@ -105,14 +96,13 @@ router.post('/', requireRole('supervisor'), (req, res) => {
     action: 'process_refund',
     entity_type: 'refund',
     entity_id: refundId,
-    details: { totalRefund, totalTaxReversed, method, original_bill: txn.bill_number }
+    details: { totalRefund, method, original_bill: txn.bill_number }
   });
 
   res.status(201).json({
     ...refund,
     items: refundedItems,
     original_bill: txn.bill_number,
-    total_tax_reversed: totalTaxReversed,
     credit_note: creditNoteCreated
   });
 });

@@ -14,7 +14,6 @@ router.get('/x-report', (req, res) => {
     SELECT
       COUNT(*) as total_transactions,
       COALESCE(SUM(grand_total), 0) as total_sales,
-      COALESCE(SUM(tax_amount), 0) as total_tax,
       COALESCE(SUM(total_discount), 0) as total_discounts
     FROM transactions
     WHERE status = 'completed' AND date(completed_at) = ?
@@ -63,7 +62,6 @@ router.get('/z-report', (req, res) => {
     SELECT
       COUNT(*) as total_transactions,
       COALESCE(SUM(grand_total), 0) as total_sales,
-      COALESCE(SUM(tax_amount), 0) as total_tax,
       COALESCE(SUM(total_discount), 0) as total_discounts
     FROM transactions
     WHERE status = 'completed' AND date(completed_at) = ?
@@ -130,8 +128,7 @@ router.get('/daily-sales', (req, res) => {
   const sales = db.prepare(`
     SELECT date(completed_at) as date,
       COUNT(*) as transactions,
-      COALESCE(SUM(grand_total), 0) as total_sales,
-      COALESCE(SUM(tax_amount), 0) as total_tax
+      COALESCE(SUM(grand_total), 0) as total_sales
     FROM transactions
     WHERE status = 'completed' AND date(completed_at) BETWEEN ? AND ?
     GROUP BY date(completed_at)
@@ -139,142 +136,6 @@ router.get('/daily-sales', (req, res) => {
   `).all(from, to);
 
   res.json({ from, to, days: sales });
-});
-
-// ── GET /api/reports/gst — GST Tax Summary by Rate (5% / 18%) ──
-router.get('/gst', (req, res) => {
-  const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const to = req.query.to || new Date().toISOString().slice(0, 10);
-
-  const items = db.prepare(`
-    SELECT ti.tax_rate, ti.hsn_code, t.is_interstate,
-      SUM(ti.line_total) as gross_value,
-      SUM(ti.tax_included) as total_tax
-    FROM transaction_items ti
-    JOIN transactions t ON ti.txn_id = t.id
-    WHERE t.status = 'completed' AND date(t.completed_at) BETWEEN ? AND ?
-    GROUP BY ti.tax_rate, ti.hsn_code, t.is_interstate
-  `).all(from, to);
-
-  const summary = {
-    slab_5: { rate: 5.0, taxable_value: 0, cgst: 0, sgst: 0, igst: 0, total_tax: 0, gross_value: 0 },
-    slab_18: { rate: 18.0, taxable_value: 0, cgst: 0, sgst: 0, igst: 0, total_tax: 0, gross_value: 0 },
-    other: { rate: 'other', taxable_value: 0, cgst: 0, sgst: 0, igst: 0, total_tax: 0, gross_value: 0 },
-    total: { taxable_value: 0, cgst: 0, sgst: 0, igst: 0, total_tax: 0, gross_value: 0 }
-  };
-
-  for (const row of items) {
-    const rate = Number(row.tax_rate) || 5;
-    const gross = Number(row.gross_value) || 0;
-    const tax = Number(row.total_tax) || 0;
-    const taxable = Math.round((gross - tax) * 100) / 100;
-
-    let target = summary.other;
-    if (Math.abs(rate - 5.0) < 0.1) target = summary.slab_5;
-    else if (Math.abs(rate - 18.0) < 0.1) target = summary.slab_18;
-
-    target.gross_value += gross;
-    target.taxable_value += taxable;
-    target.total_tax += tax;
-
-    if (row.is_interstate) {
-      target.igst += tax;
-      summary.total.igst += tax;
-    } else {
-      const halfTax = Math.round((tax / 2) * 100) / 100;
-      target.cgst += halfTax;
-      target.sgst += (tax - halfTax);
-      summary.total.cgst += halfTax;
-      summary.total.sgst += (tax - halfTax);
-    }
-
-    summary.total.gross_value += gross;
-    summary.total.taxable_value += taxable;
-    summary.total.total_tax += tax;
-  }
-
-  // Round summary figures
-  ['slab_5', 'slab_18', 'other', 'total'].forEach(k => {
-    const obj = summary[k];
-    obj.gross_value = Math.round(obj.gross_value * 100) / 100;
-    obj.taxable_value = Math.round(obj.taxable_value * 100) / 100;
-    obj.cgst = Math.round(obj.cgst * 100) / 100;
-    obj.sgst = Math.round(obj.sgst * 100) / 100;
-    obj.igst = Math.round(obj.igst * 100) / 100;
-    obj.total_tax = Math.round(obj.total_tax * 100) / 100;
-  });
-
-  res.json({ from, to, summary, items_breakdown: items });
-});
-
-// ── GET /api/reports/gst-csv?from=&to= — CSV export for Accountant ──
-router.get('/gst-csv', (req, res) => {
-  const from = req.query.from || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-  const to = req.query.to || new Date().toISOString().slice(0, 10);
-
-  const transactions = db.prepare(`
-    SELECT t.bill_number, t.completed_at, t.is_interstate, t.grand_total,
-           c.name as customer_name, c.phone as customer_phone,
-           ti.product_id, ti.quantity, ti.unit_price, ti.discount, ti.line_total,
-           ti.tax_rate, ti.tax_included, ti.hsn_code,
-           p.name as product_name
-    FROM transactions t
-    LEFT JOIN customers c ON t.customer_id = c.id
-    JOIN transaction_items ti ON ti.txn_id = t.id
-    JOIN products p ON ti.product_id = p.id
-    WHERE t.status = 'completed' AND date(t.completed_at) BETWEEN ? AND ?
-    ORDER BY t.completed_at ASC, t.bill_number ASC
-  `).all(from, to);
-
-  const headers = [
-    'Invoice Number',
-    'Invoice Date',
-    'Customer Name',
-    'Customer Phone',
-    'Item Description',
-    'HSN Code',
-    'Quantity',
-    'Taxable Value (Rs)',
-    'GST Rate (%)',
-    'CGST (Rs)',
-    'SGST (Rs)',
-    'IGST (Rs)',
-    'Total Tax (Rs)',
-    'Line Total (Rs)'
-  ];
-
-  const rows = transactions.map(r => {
-    const gross = Number(r.line_total) || 0;
-    const tax = Number(r.tax_included) || 0;
-    const taxable = Math.round((gross - tax) * 100) / 100;
-    const isInterstate = Boolean(r.is_interstate);
-    const cgst = isInterstate ? 0 : Math.round((tax / 2) * 100) / 100;
-    const sgst = isInterstate ? 0 : Math.round((tax - cgst) * 100) / 100;
-    const igst = isInterstate ? tax : 0;
-
-    return [
-      `"${r.bill_number}"`,
-      `"${(r.completed_at || '').slice(0, 10)}"`,
-      `"${(r.customer_name || 'Walk-in').replace(/"/g, '""')}"`,
-      `"${r.customer_phone || ''}"`,
-      `"${(r.product_name || '').replace(/"/g, '""')}"`,
-      `"${r.hsn_code || '6204'}"`,
-      r.quantity,
-      taxable.toFixed(2),
-      r.tax_rate,
-      cgst.toFixed(2),
-      sgst.toFixed(2),
-      igst.toFixed(2),
-      tax.toFixed(2),
-      gross.toFixed(2)
-    ].join(',');
-  });
-
-  const csvContent = [headers.join(','), ...rows].join('\n');
-
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="GST_Report_${from}_to_${to}.csv"`);
-  res.send(csvContent);
 });
 
 // ── GET /api/reports/top-products?limit=10&from=&to= ──

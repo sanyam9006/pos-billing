@@ -5,9 +5,20 @@ const { requireRole } = require('../utils/auth');
 const { logAudit } = require('../utils/audit');
 const { performBackup } = require('../utils/backup');
 
+const GST_KEYS = new Set([
+  'GST_MODE',
+  'GARMENT_TAX_THRESHOLD',
+  'DEFAULT_GST_RATE_LOW',
+  'DEFAULT_GST_RATE_HIGH',
+  'SLAB_BASED_ON',
+  'STORE_GSTIN',
+  'STATE_CODE'
+]);
+
 // ── GET /api/settings — Get all settings ──
 router.get('/', (req, res) => {
-  const rows = db.prepare('SELECT key, value, description, updated_at FROM settings').all();
+  const rows = db.prepare('SELECT key, value, description, updated_at FROM settings').all()
+    .filter(r => !GST_KEYS.has(r.key));
   const settingsObj = {};
   rows.forEach(r => {
     settingsObj[r.key] = r.value;
@@ -30,7 +41,7 @@ router.put('/', requireRole('supervisor'), (req, res) => {
 
   const saveTxn = db.transaction(() => {
     for (const [key, val] of Object.entries(updates)) {
-      if (val !== undefined && val !== null) {
+      if (val !== undefined && val !== null && !GST_KEYS.has(key)) {
         updateStmt.run(key, String(val));
       }
     }
@@ -46,7 +57,8 @@ router.put('/', requireRole('supervisor'), (req, res) => {
     details: updates
   });
 
-  const updatedRows = db.prepare('SELECT key, value FROM settings').all();
+  const updatedRows = db.prepare('SELECT key, value FROM settings').all()
+    .filter(r => !GST_KEYS.has(r.key));
   const result = {};
   updatedRows.forEach(r => { result[r.key] = r.value; });
 

@@ -22,7 +22,7 @@ if (fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
 }
 
-const { getSetting } = require('./utils/tax');
+const { getSetting } = require('./utils/settings');
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -35,8 +35,6 @@ app.get('/api/config', (req, res) => {
     store_name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
     store_address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001'),
     store_phone: getSetting('STORE_PHONE', '+91 98765 43210'),
-    store_gstin: getSetting('STORE_GSTIN', '08AAAAA0000A1Z5'),
-    gst_mode: getSetting('GST_MODE', 'registered'),
     currency_symbol: '₹',
     business_type: 'boutique',
     bill_prefix: getSetting('BILL_PREFIX', 'AB-'),

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { getSetting } = require('../utils/tax');
+const { getSetting } = require('../utils/settings');
 const { logAudit } = require('../utils/audit');
 
 function generateOrderNumber() {
@@ -59,8 +59,7 @@ router.get('/:id/slip', (req, res) => {
   const store = {
     name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
     phone: getSetting('STORE_PHONE', '+91 98765 43210'),
-    address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001'),
-    gstin: getSetting('STORE_GSTIN', '08AAAAA0000A1Z5')
+    address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001')
   };
 
   let measurements = {};
