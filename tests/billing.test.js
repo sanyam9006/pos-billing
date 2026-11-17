@@ -353,6 +353,10 @@ describe('Role Enforcement', () => {
 // CUSTOMER CREATION
 // ═══════════════════════════
 describe('Customer Management', () => {
+  beforeAll(() => {
+    db.prepare("DELETE FROM customers WHERE phone = '5555555555'").run();
+  });
+
   test('create new customer', async () => {
     const res = await request(app)
       .post('/api/customers')

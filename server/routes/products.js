@@ -44,7 +44,7 @@ router.get('/', (req, res) => {
 router.post('/', requireRole('supervisor'), (req, res) => {
   const { sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate = 5, stock_qty = 0, unit = 'pcs' } = req.body;
 
-  if (!sku || !barcode || !name || !category || mrp == null || selling_price == null) {
+  if (!sku || !barcode || !name || !category || mrp === undefined || mrp === null || selling_price === undefined || selling_price === null) {
     return res.status(400).json({ error: 'Required fields: sku, barcode, name, category, mrp, selling_price' });
   }
 
@@ -102,11 +102,11 @@ router.put('/:id/stock', requireRole('supervisor'), (req, res) => {
 
   const { adjustment, set: setQty } = req.body;
 
-  if (setQty != null) {
+  if (setQty !== undefined && setQty !== null) {
     // Absolute set
     if (setQty < 0) return res.status(400).json({ error: 'Stock cannot be negative' });
     db.prepare('UPDATE products SET stock_qty = ? WHERE id = ?').run(setQty, req.params.id);
-  } else if (adjustment != null) {
+  } else if (adjustment !== undefined && adjustment !== null) {
     // Relative adjustment
     const newQty = product.stock_qty + adjustment;
     if (newQty < 0) return res.status(400).json({ error: `Adjustment would result in negative stock (current: ${product.stock_qty})` });

@@ -30,7 +30,8 @@ router.post('/login', (req, res) => {
   const token = generateToken(cashier);
 
   // Don't send the PIN hash back to the client
-  const { pin: _, ...cashierData } = cashier;
+  const cashierData = { ...cashier };
+  delete cashierData.pin;
 
   res.json({ success: true, token, cashier: cashierData });
 });
