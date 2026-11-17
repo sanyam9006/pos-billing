@@ -13,6 +13,11 @@ app.use(express.json());
 // Public routes (no auth required)
 app.use('/api/auth', require('./routes/auth'));
 
+// Root redirect to frontend
+app.get('/', (req, res) => {
+  res.redirect('http://localhost:5173');
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
