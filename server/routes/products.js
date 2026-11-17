@@ -6,8 +6,10 @@ const { logAudit } = require('../utils/audit');
 
 function sanitizeProduct(p) {
   if (!p) return p;
-  const { tax_rate, hsn_code, ...rest } = p;
-  return rest;
+  const copy = { ...p };
+  delete copy.tax_rate;
+  delete copy.hsn_code;
+  return copy;
 }
 
 // GET /api/products/scan/:barcode

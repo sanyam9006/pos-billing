@@ -3,12 +3,6 @@ const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../utils/auth');
 
-function sanitizeSupplier(s) {
-  if (!s) return s;
-  const { gstin, ...rest } = s;
-  return rest;
-}
-
 // ── GET /api/suppliers — List suppliers ──
 router.get('/', (req, res) => {
   const suppliers = db.prepare('SELECT id, name, contact_person, phone, email, address, is_active, created_at FROM suppliers WHERE is_active = 1 ORDER BY name').all();

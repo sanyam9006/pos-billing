@@ -20,18 +20,18 @@ beforeAll(async () => {
     db.prepare("DELETE FROM products WHERE sku LIKE 'TEST-BILL-%'").run();
   } catch (_) {}
   testProd1 = db.prepare(`
-    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate, stock_qty)
-    VALUES ('TEST-BILL-01', '8909999001', 'Test Printed Kurti', 'Kurtis', 1200, 1200, '6204', 5, 100)
+    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, stock_qty)
+    VALUES ('TEST-BILL-01', '8909999001', 'Test Printed Kurti', 'Kurtis', 1200, 1200, 100)
   `).run().lastInsertRowid;
 
   testProd2 = db.prepare(`
-    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate, stock_qty)
-    VALUES ('TEST-BILL-02', '8909999002', 'Test Daily Kurti', 'Kurtis', 800, 800, '6204', 5, 80)
+    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, stock_qty)
+    VALUES ('TEST-BILL-02', '8909999002', 'Test Daily Kurti', 'Kurtis', 800, 800, 80)
   `).run().lastInsertRowid;
 
   testProdCoupon = db.prepare(`
-    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate, stock_qty)
-    VALUES ('TEST-BILL-03', '8909999003', 'Test Silk Saree', 'Sarees', 3000, 3000, '5407', 18, 50)
+    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, stock_qty)
+    VALUES ('TEST-BILL-03', '8909999003', 'Test Silk Saree', 'Sarees', 3000, 3000, 50)
   `).run().lastInsertRowid;
 
   // Login as supervisor (OWNER01 / 9999 or EMP003 / 9999)
@@ -128,13 +128,10 @@ describe('Transactions & recalcTotals (Tax-Inclusive)', () => {
     itemId = item.id;
 
     // Unit price * qty = 1200 * 2 = 2400
-    // Customer pays ONLY 2400 (grand total = subtotal)
+    // Customer pays strictly 2400 (grand total = subtotal)
     expect(res.body.subtotal).toBe(2400);
     expect(res.body.grand_total).toBe(2400);
-
-    // Extracted embedded tax: 2400 - (2400 / 1.05) ~ 114.29
-    expect(res.body.tax_amount).toBeGreaterThan(113);
-    expect(res.body.tax_amount).toBeLessThan(115);
+    expect(res.body.tax_amount).toBeUndefined();
   });
 
   test('update quantity recalculates totals tax-inclusively', async () => {
@@ -303,16 +300,19 @@ describe('Payment Completion', () => {
     expect(res.body.change).toBeGreaterThanOrEqual(0);
   });
 
-  test('receipt endpoint returns correct boutique invoice data', async () => {
+  test('receipt endpoint returns correct boutique bill data', async () => {
     const res = await request(app)
       .get(`/api/payments/receipt/${txnId}`)
       .set(authHeader(cashierToken));
 
     expect(res.status).toBe(200);
     expect(res.body.store).toBeDefined();
+    expect(res.body.bill_title).toBe('Bill');
     expect(res.body.bill_number).toMatch(/^(AB|SM)-/);
     expect(res.body.items.length).toBeGreaterThan(0);
     expect(res.body.payments.length).toBeGreaterThan(0);
+    const receiptStr = JSON.stringify(res.body);
+    expect(receiptStr).not.toMatch(/\b(tax|gst|gstin|hsn|cgst|sgst|igst)\b/i);
   });
 });
 

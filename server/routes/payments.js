@@ -7,8 +7,10 @@ const { logAudit } = require('../utils/audit');
 // ── Helper: sanitize transaction object (strip tax columns) ──
 function sanitizeTxn(txn) {
   if (!txn) return txn;
-  const { tax_amount, is_interstate, ...rest } = txn;
-  return rest;
+  const copy = { ...txn };
+  delete copy.tax_amount;
+  delete copy.is_interstate;
+  return copy;
 }
 
 // ── Helper: process store credit redemption ──

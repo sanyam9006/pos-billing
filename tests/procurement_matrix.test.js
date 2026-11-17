@@ -42,7 +42,6 @@ describe('Procurement & Batch Matrix Variants', () => {
         category: 'Apparel',
         mrp: 1999,
         selling_price: 1499,
-        tax_rate: 5,
         stock_qty: 15,
         unit: 'pcs',
         variant_size: 'S',
@@ -55,7 +54,6 @@ describe('Procurement & Batch Matrix Variants', () => {
         category: 'Apparel',
         mrp: 1999,
         selling_price: 1499,
-        tax_rate: 5,
         stock_qty: 20,
         unit: 'pcs',
         variant_size: 'M',
@@ -99,7 +97,6 @@ describe('Procurement & Batch Matrix Variants', () => {
         contact_person: 'Anil Gupta',
         phone: '9811223344',
         email: 'anil@testsupplier.com',
-        gstin: '27AABCU9999Z1Z1',
         address: 'Bhiwandi, Maharashtra'
       });
 

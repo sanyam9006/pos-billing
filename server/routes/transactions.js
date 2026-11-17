@@ -26,8 +26,10 @@ const generateBillNumber = db.transaction(() => {
 // ── Helper: sanitize transaction object to ensure zero tax fields in API responses ──
 function sanitizeTxn(txn) {
   if (!txn) return txn;
-  const { tax_amount, is_interstate, ...rest } = txn;
-  return rest;
+  const copy = { ...txn };
+  delete copy.tax_amount;
+  delete copy.is_interstate;
+  return copy;
 }
 
 // ── Helper: recalculate transaction totals strictly at MRP / selling price ──
