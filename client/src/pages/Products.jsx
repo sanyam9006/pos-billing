@@ -105,7 +105,6 @@ export default function Products({ cashier }) {
               <th>Category</th>
               <th>MRP</th>
               <th>Selling Price</th>
-              <th>Tax %</th>
               <th>Stock</th>
               {isSupervisor && <th>Actions</th>}
             </tr>
@@ -127,7 +126,6 @@ export default function Products({ cashier }) {
                 <td><span className="category-badge">{p.category}</span></td>
                 <td className="num">{formatPrice(p.mrp)}</td>
                 <td className="num">{formatPrice(p.selling_price)}</td>
-                <td className="num">{p.tax_rate}%</td>
                 <td>
                   <span className={`stock-badge ${p.stock_qty <= 0 ? 'out' : p.stock_qty <= 10 ? 'low' : 'ok'}`}>
                     {p.stock_qty} {p.unit}
@@ -202,8 +200,6 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
   const [mrp, setMrp] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
   const [costPrice, setCostPrice] = useState('')
-  const [hsnCode, setHsnCode] = useState('6204')
-  const [taxRate, setTaxRate] = useState(5)
   const [stockPerVariant, setStockPerVariant] = useState(10)
 
   // Quick preset selections
@@ -255,10 +251,8 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
         mrp: parseFloat(mrp) || 0,
         selling_price: parseFloat(sellingPrice) || 0,
         cost_price: parseFloat(costPrice) || 0,
-        tax_rate: parseFloat(taxRate) || 5,
         stock_qty: parseInt(stockPerVariant) || 0,
         unit: 'pcs',
-        hsn_code: hsnCode,
         variant_size: size,
         variant_color: color
       })
@@ -323,7 +317,6 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
           <div className="form-group"><label>MRP *</label><input type="number" placeholder="1999" value={mrp} onChange={e => setMrp(e.target.value)} /></div>
           <div className="form-group"><label>Selling Price *</label><input type="number" placeholder="1499" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} /></div>
           <div className="form-group"><label>Cost Price</label><input type="number" placeholder="600" value={costPrice} onChange={e => setCostPrice(e.target.value)} /></div>
-          <div className="form-group"><label>Tax Rate %</label><input type="number" value={taxRate} onChange={e => setTaxRate(e.target.value)} /></div>
         </div>
 
         {/* Sizes Attribute Matrix */}
@@ -500,7 +493,6 @@ function BarcodeTagModal({ product, onClose }) {
             <span class="mrp">MRP ₹${product.mrp}</span>
             <span class="sale-price">₹${product.selling_price}</span>
           </div>
-          <div style="font-size: 10px; color: #777; margin-top: 4px;">(Incl. of all taxes)</div>
         </div>
         <script>
           window.onload = function() { window.print(); }
@@ -554,8 +546,6 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
     cost_price: product?.cost_price || '',
     variant_size: product?.variant_size || '',
     variant_color: product?.variant_color || '',
-    hsn_code: product?.hsn_code || '6204',
-    tax_rate: product?.tax_rate ?? 5,
     stock_qty: product?.stock_qty ?? 0,
     unit: product?.unit || 'pcs'
   })
@@ -574,7 +564,6 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
           mrp: parseFloat(form.mrp),
           selling_price: parseFloat(form.selling_price),
           cost_price: parseFloat(form.cost_price || 0),
-          tax_rate: parseFloat(form.tax_rate),
           stock_qty: parseInt(form.stock_qty)
         })
       })
@@ -603,7 +592,7 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
           <div className="form-group"><label>Name *</label><input value={form.name} onChange={e => update('name', e.target.value)} required /></div>
           <div className="form-row">
             <div className="form-group"><label>Category *</label><input value={form.category} onChange={e => update('category', e.target.value)} required /></div>
-            <div className="form-group"><label>HSN Code</label><input value={form.hsn_code} onChange={e => update('hsn_code', e.target.value)} /></div>
+            <div className="form-group"><label>Cost Price (Wholesale / Stitching)</label><input type="number" step="0.01" value={form.cost_price} onChange={e => update('cost_price', e.target.value)} /></div>
           </div>
           <div className="form-row">
             <div className="form-group"><label>Size</label><input placeholder="e.g. S, M, L, Free" value={form.variant_size} onChange={e => update('variant_size', e.target.value)} /></div>
@@ -611,18 +600,14 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
           </div>
           <div className="form-row">
             <div className="form-group"><label>MRP (Tag Price) *</label><input type="number" step="0.01" value={form.mrp} onChange={e => update('mrp', e.target.value)} required /></div>
-            <div className="form-group"><label>Selling Price (Tax-Inclusive) *</label><input type="number" step="0.01" value={form.selling_price} onChange={e => update('selling_price', e.target.value)} required /></div>
-            <div className="form-group"><label>Cost Price (Wholesale / Stitching)</label><input type="number" step="0.01" value={form.cost_price} onChange={e => update('cost_price', e.target.value)} /></div>
+            <div className="form-group"><label>Selling Price *</label><input type="number" step="0.01" value={form.selling_price} onChange={e => update('selling_price', e.target.value)} required /></div>
           </div>
-          <div className="form-row">
-            <div className="form-group"><label>Base GST % (HSN default)</label><input type="number" value={form.tax_rate} onChange={e => update('tax_rate', e.target.value)} /></div>
-            {!isEdit && (
-              <>
-                <div className="form-group"><label>Initial Stock</label><input type="number" value={form.stock_qty} onChange={e => update('stock_qty', e.target.value)} /></div>
-                <div className="form-group"><label>Unit</label><input value={form.unit} onChange={e => update('unit', e.target.value)} /></div>
-              </>
-            )}
-          </div>
+          {!isEdit && (
+            <div className="form-row">
+              <div className="form-group"><label>Initial Stock</label><input type="number" value={form.stock_qty} onChange={e => update('stock_qty', e.target.value)} /></div>
+              <div className="form-group"><label>Unit</label><input value={form.unit} onChange={e => update('unit', e.target.value)} /></div>
+            </div>
+          )}
           <div className="modal-actions">
             <button type="button" className="modal-btn secondary" onClick={onClose}>Cancel</button>
             <button type="submit" className="modal-btn primary" disabled={saving}>

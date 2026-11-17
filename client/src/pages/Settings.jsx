@@ -6,14 +6,7 @@ export default function Settings() {
     STORE_NAME: 'Aura Fashion Boutique',
     STORE_ADDRESS: 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001',
     STORE_PHONE: '+91 98765 43210',
-    STORE_GSTIN: '08AAAAA0000A1Z5',
-    STATE_CODE: '08',
-    GST_MODE: 'registered',
     BILL_PREFIX: 'AB-',
-    GARMENT_TAX_THRESHOLD: '2500',
-    DEFAULT_GST_RATE_LOW: '5.0',
-    DEFAULT_GST_RATE_HIGH: '18.0',
-    SLAB_BASED_ON: 'TAG_PRICE',
     DISCOUNT_PIN_THRESHOLD: '500',
     FOOTER_TEXT: 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact.',
     THERMAL_WIDTH: '80mm'
@@ -112,9 +105,9 @@ export default function Settings() {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <span>⚙️</span> Boutique Store & GST Settings
+            <span>⚙️</span> Boutique Store Settings
           </h1>
-          <p className="text-sm text-gray-500">Configure branding, tax slab rules, print sizes, and store policies</p>
+          <p className="text-sm text-gray-500">Configure branding, print sizes, and store policies</p>
         </div>
         <div className="flex gap-3">
           <button
@@ -258,135 +251,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* Section 2: Indian GST & Apparel Slabs */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
-            <span>🇮🇳</span> Indian GST Configuration (HSN 61/62/63 Apparel)
-          </h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">GST Registration Mode</label>
-              <select
-                name="GST_MODE"
-                value={settings.GST_MODE}
-                onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-purple-500 outline-none bg-white"
-              >
-                <option value="registered">Registered — Tax Invoice (GSTIN, HSN, CGST + SGST / IGST)</option>
-                <option value="unregistered">Unregistered — Bill of Supply (No GSTIN, No Tax Breakdown)</option>
-              </select>
-              <span className="text-xs text-gray-500 mt-1 block">
-                {settings.GST_MODE === 'unregistered'
-                  ? 'Prints "Bill of Supply" at the top with NO tax lines or GSTIN.'
-                  : 'Prints official "TAX INVOICE" with GSTIN, HSN, Taxable Value & CGST/SGST split.'}
-              </span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Store GSTIN</label>
-              <input
-                type="text"
-                name="STORE_GSTIN"
-                value={settings.STORE_GSTIN}
-                onChange={handleChange}
-                disabled={settings.GST_MODE === 'unregistered'}
-                className="w-full p-2.5 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none disabled:bg-gray-100"
-                placeholder="e.g. 08AAAAA0000A1Z5"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">State Code (Intra-state sales)</label>
-              <input
-                type="text"
-                name="STATE_CODE"
-                value={settings.STATE_CODE}
-                onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none"
-                placeholder="08 = Rajasthan"
-              />
-              <span className="text-xs text-gray-400">Intra-state sales split into CGST (50%) + SGST (50%)</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Apparel Slab Threshold (₹ per piece)</label>
-              <input
-                type="number"
-                name="GARMENT_TAX_THRESHOLD"
-                value={settings.GARMENT_TAX_THRESHOLD}
-                onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm font-semibold focus:ring-2 focus:ring-purple-500 outline-none"
-              />
-              <span className="text-xs text-gray-400">Apparel rule: ₹2,500 threshold per piece (Notification 15/2021)</span>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Low Rate (≤ Threshold)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.1"
-                  name="DEFAULT_GST_RATE_LOW"
-                  value={settings.DEFAULT_GST_RATE_LOW}
-                  onChange={handleChange}
-                  className="w-full p-2.5 border rounded-lg text-sm pr-8 focus:ring-2 focus:ring-purple-500 outline-none"
-                />
-                <span className="absolute right-3 top-2.5 text-gray-400 text-sm">%</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">High Rate (&gt; Threshold)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="0.1"
-                  name="DEFAULT_GST_RATE_HIGH"
-                  value={settings.DEFAULT_GST_RATE_HIGH}
-                  onChange={handleChange}
-                  className="w-full p-2.5 border rounded-lg text-sm pr-8 focus:ring-2 focus:ring-purple-500 outline-none"
-                />
-                <span className="absolute right-3 top-2.5 text-gray-400 text-sm">%</span>
-              </div>
-            </div>
-
-            <div className="md:col-span-2 bg-amber-50 p-4 rounded-lg border border-amber-200">
-              <label className="block text-xs font-bold text-amber-900 mb-1">
-                Slab Evaluation Rule for Tax-Inclusive Retail Price
-              </label>
-              <div className="flex gap-4 my-2">
-                <label className="flex items-center gap-2 text-sm text-amber-900 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="SLAB_BASED_ON"
-                    value="TAG_PRICE"
-                    checked={settings.SLAB_BASED_ON === 'TAG_PRICE'}
-                    onChange={handleChange}
-                  />
-                  <span><strong>TAG_PRICE</strong> — Based on Tag / Effective Sale Price (Retail Standard)</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm text-amber-900 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="SLAB_BASED_ON"
-                    value="TAXABLE_VALUE"
-                    checked={settings.SLAB_BASED_ON === 'TAXABLE_VALUE'}
-                    onChange={handleChange}
-                  />
-                  <span><strong>TAXABLE_VALUE</strong> — Based on Derived Taxable Value</span>
-                </label>
-              </div>
-              <p className="text-xs text-amber-800 leading-relaxed mt-1">
-                📌 <strong>CA Note on ₹2,625–₹2,950 range:</strong> An inclusive price of ₹2,625 yields ₹2,500 taxable value at 5% tax.
-                Choosing <code>TAG_PRICE</code> applies 18% for tag prices &gt; ₹2,500. Choosing <code>TAXABLE_VALUE</code> applies 5% as long as derived taxable value is ≤ ₹2,500.
-                <strong>Please confirm with your boutique&apos;s Chartered Accountant (CA) for preferred filing method.</strong>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Section 3: Discounts & Owner Approvals */}
+        {/* Section 2: Discounts & Owner Approvals */}
         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
           <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
             <span>🛡️</span> Security & Approvals

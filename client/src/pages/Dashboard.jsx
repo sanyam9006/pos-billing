@@ -58,13 +58,6 @@ export default function Dashboard({ cashier }) {
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon">🏛️</div>
-              <div className="stat-info">
-                <div className="stat-value">{formatPrice(stats.total_tax)}</div>
-                <div className="stat-label">Tax Collected</div>
-              </div>
-            </div>
-            <div className="stat-card">
               <div className="stat-icon">🏷️</div>
               <div className="stat-info">
                 <div className="stat-value">{formatPrice(stats.total_discounts)}</div>

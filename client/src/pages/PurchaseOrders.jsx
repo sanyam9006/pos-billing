@@ -174,7 +174,6 @@ export default function PurchaseOrders({ cashier }) {
                 <th>Contact Person</th>
                 <th>Phone</th>
                 <th>Email</th>
-                <th>GSTIN</th>
                 <th>Address</th>
               </tr>
             </thead>
@@ -185,7 +184,6 @@ export default function PurchaseOrders({ cashier }) {
                   <td>{s.contact_person || '—'}</td>
                   <td><code>{s.phone || '—'}</code></td>
                   <td>{s.email || '—'}</td>
-                  <td><code>{s.gstin || '—'}</code></td>
                   <td>{s.address || '—'}</td>
                 </tr>
               ))}
@@ -455,7 +453,6 @@ function AddSupplierModal({ onSuccess, onClose, notify }) {
     contact_person: '',
     phone: '',
     email: '',
-    gstin: '',
     address: ''
   })
   const [saving, setSaving] = useState(false)
@@ -495,10 +492,7 @@ function AddSupplierModal({ onSuccess, onClose, notify }) {
             <div className="form-group"><label>Contact Person</label><input placeholder="e.g. Ramesh Kumar" value={form.contact_person} onChange={e => update('contact_person', e.target.value)} /></div>
             <div className="form-group"><label>Phone Number</label><input type="tel" placeholder="e.g. 9820011223" value={form.phone} onChange={e => update('phone', e.target.value)} /></div>
           </div>
-          <div className="form-row">
-            <div className="form-group"><label>GSTIN</label><input placeholder="e.g. 27ABCDE1234F1Z5" value={form.gstin} onChange={e => update('gstin', e.target.value)} /></div>
-            <div className="form-group"><label>Email</label><input type="email" placeholder="vendor@supplier.com" value={form.email} onChange={e => update('email', e.target.value)} /></div>
-          </div>
+          <div className="form-group"><label>Email</label><input type="email" placeholder="vendor@supplier.com" value={form.email} onChange={e => update('email', e.target.value)} /></div>
           <div className="form-group"><label>Address / Warehouse Location</label><input placeholder="City, State" value={form.address} onChange={e => update('address', e.target.value)} /></div>
           <div className="modal-actions">
             <button type="button" className="modal-btn secondary" onClick={onClose}>Cancel</button>

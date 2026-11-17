@@ -132,7 +132,7 @@ function ProcessRefundModal({ onClose, onDone, notify }) {
   const totalRefund = Object.entries(selectedItems).reduce((sum, [itemId, qty]) => {
     const item = txnItems.find(i => i.id === parseInt(itemId))
     if (!item) return sum
-    return sum + (item.unit_price * qty + item.tax * qty / item.quantity)
+    return sum + ((item.line_total / (item.quantity || 1)) * qty)
   }, 0)
 
   const processRefund = async () => {

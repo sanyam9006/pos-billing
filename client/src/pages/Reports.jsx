@@ -27,7 +27,6 @@ export default function Reports() {
         case 'x-report': url = '/api/reports/x-report'; break
         case 'z-report': url = `/api/reports/z-report?date=${zDate}`; break
         case 'daily': url = `/api/reports/daily-sales?from=${dateRange.from}&to=${dateRange.to}`; break
-        case 'gst': url = `/api/reports/gst?from=${dateRange.from}&to=${dateRange.to}`; break
         case 'profit': url = `/api/reports/profit?from=${dateRange.from}&to=${dateRange.to}`; break
         case 'top-products': url = `/api/reports/top-products?limit=20&from=${dateRange.from}&to=${dateRange.to}`; break
         case 'slow-movers': url = `/api/reports/slow-movers?days=30&max_sold=2`; break
@@ -60,27 +59,9 @@ export default function Reports() {
     }
   }
 
-  const handleDownloadGstCsv = () => {
-    const token = JSON.parse(localStorage.getItem('pos_cashier_session') || '{}').token || ''
-    const url = `/api/reports/gst-csv?from=${dateRange.from}&to=${dateRange.to}`
-    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.blob())
-      .then(blob => {
-        const downloadUrl = window.URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = downloadUrl
-        a.download = `GST_Report_${dateRange.from}_to_${dateRange.to}.csv`
-        document.body.appendChild(a)
-        a.click()
-        a.remove()
-      })
-      .catch(() => alert('Failed to download CSV export'))
-  }
-
   const tabs = [
     { id: 'x-report', label: '📊 X Report', desc: 'Current shift' },
     { id: 'z-report', label: '📋 Z Report', desc: 'End of day' },
-    { id: 'gst', label: '🇮🇳 GST Slabs', desc: '5% vs 18% & CSV' },
     { id: 'profit', label: '💰 Profit & Margin', desc: 'Cost vs Revenue' },
     { id: 'daily', label: '📅 Daily Sales', desc: 'Date range trends' },
     { id: 'top-products', label: '🏆 Top Sellers', desc: 'Best selling items' },
@@ -94,8 +75,8 @@ export default function Reports() {
     <div className="page reports-page">
       <div className="page-header">
         <div>
-          <h1>📈 Boutique Reports & GST Analytics</h1>
-          <p className="page-subtitle">Sales audits, apparel GST slabs, profit margins, and accountant exports</p>
+          <h1>📈 Boutique Reports & Analytics</h1>
+          <p className="page-subtitle">Sales audits, profit margins, top sellers, and customer history</p>
         </div>
       </div>
 
@@ -121,7 +102,7 @@ export default function Reports() {
         </div>
       )}
 
-      {['daily', 'gst', 'profit', 'top-products', 'cashier'].includes(activeTab) && (
+      {['daily', 'profit', 'top-products', 'cashier'].includes(activeTab) && (
         <div className="date-controls flex items-center justify-between">
           <div className="flex items-center gap-3">
             <label>From:</label>
@@ -130,11 +111,6 @@ export default function Reports() {
             <input type="date" value={dateRange.to} onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))} />
             <button className="btn-primary btn-sm" onClick={loadReport}>Apply</button>
           </div>
-          {activeTab === 'gst' && (
-            <button onClick={handleDownloadGstCsv} className="btn-success btn-sm flex items-center gap-2">
-              <span>📥</span> Export GST CSV for CA
-            </button>
-          )}
         </div>
       )}
 
@@ -158,76 +134,6 @@ export default function Reports() {
       {/* Report Content */}
       {!loading && data && (
         <div className="report-content">
-          {/* ═══════════ GST SLABS REPORT ═══════════ */}
-          {activeTab === 'gst' && data.summary && (
-            <div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="metric-card bg-blue-50 border-blue-200">
-                  <div className="metric-label font-bold text-blue-900">5% GST Slab (≤ ₹2,500)</div>
-                  <div className="metric-val text-xl text-blue-700">{formatPrice(data.summary.slab_5.gross_value)}</div>
-                  <div className="text-xs text-blue-600 mt-2">
-                    Taxable: {formatPrice(data.summary.slab_5.taxable_value)} | GST: {formatPrice(data.summary.slab_5.total_tax)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    CGST: {formatPrice(data.summary.slab_5.cgst)} | SGST: {formatPrice(data.summary.slab_5.sgst)}
-                  </div>
-                </div>
-
-                <div className="metric-card bg-purple-50 border-purple-200">
-                  <div className="metric-label font-bold text-purple-900">18% GST Slab (&gt; ₹2,500)</div>
-                  <div className="metric-val text-xl text-purple-700">{formatPrice(data.summary.slab_18.gross_value)}</div>
-                  <div className="text-xs text-purple-600 mt-2">
-                    Taxable: {formatPrice(data.summary.slab_18.taxable_value)} | GST: {formatPrice(data.summary.slab_18.total_tax)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    CGST: {formatPrice(data.summary.slab_18.cgst)} | SGST: {formatPrice(data.summary.slab_18.sgst)}
-                  </div>
-                </div>
-
-                <div className="metric-card bg-emerald-50 border-emerald-200">
-                  <div className="metric-label font-bold text-emerald-900">Total Tax Extracted</div>
-                  <div className="metric-val text-xl text-emerald-700">{formatPrice(data.summary.total.total_tax)}</div>
-                  <div className="text-xs text-emerald-600 mt-2">
-                    Gross Invoiced: {formatPrice(data.summary.total.gross_value)}
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Taxable Value: {formatPrice(data.summary.total.taxable_value)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="report-section">
-                <h3>Detailed HSN & Slab Breakdown</h3>
-                <div className="table-responsive">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>HSN Code</th>
-                        <th>GST Rate</th>
-                        <th>Sales Type</th>
-                        <th>Gross Value (MRP)</th>
-                        <th>Taxable Value</th>
-                        <th>Total GST</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(data.items_breakdown || []).map((row, i) => (
-                        <tr key={i}>
-                          <td className="font-mono">{row.hsn_code || '6204'}</td>
-                          <td><span className="badge badge-purple">{row.tax_rate}%</span></td>
-                          <td>{row.is_interstate ? 'Inter-state (IGST)' : 'Intra-state (CGST+SGST)'}</td>
-                          <td>{formatPrice(row.gross_value)}</td>
-                          <td>{formatPrice(row.gross_value - row.total_tax)}</td>
-                          <td className="font-bold text-purple-700">{formatPrice(row.total_tax)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* ═══════════ PROFIT & MARGIN REPORT ═══════════ */}
           {activeTab === 'profit' && (
             <div>
@@ -351,10 +257,6 @@ export default function Reports() {
                   <div className="metric-label">Total Discounts</div>
                   <div className="metric-val text-amber-600">{formatPrice(data.total_discounts)}</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">GST Included</div>
-                  <div className="metric-val text-purple-600">{formatPrice(data.total_tax)}</div>
-                </div>
               </div>
 
               <div className="report-grid">
@@ -403,14 +305,13 @@ export default function Reports() {
               <h3>Daily Sales Performance</h3>
               <div className="table-responsive">
                 <table className="data-table">
-                  <thead><tr><th>Date</th><th>Bills</th><th>Sales (MRP)</th><th>Embedded GST</th></tr></thead>
+                  <thead><tr><th>Date</th><th>Bills</th><th>Sales (MRP)</th></tr></thead>
                   <tbody>
                     {data.days.map(d => (
                       <tr key={d.date}>
                         <td className="font-mono">{d.date}</td>
                         <td>{d.transactions}</td>
                         <td className="font-bold">{formatPrice(d.total_sales)}</td>
-                        <td className="text-purple-700">{formatPrice(d.total_tax)}</td>
                       </tr>
                     ))}
                   </tbody>

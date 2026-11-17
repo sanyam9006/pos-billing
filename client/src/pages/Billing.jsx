@@ -390,7 +390,6 @@ export default function Billing({ cashier, onLogout }) {
                     <th>Item</th>
                     <th className="center">Qty</th>
                     <th>Price</th>
-                    <th>Tax</th>
                     <th>Total</th>
                     <th></th>
                   </tr>
@@ -402,7 +401,9 @@ export default function Billing({ cashier, onLogout }) {
                       <td>
                         <div className="item-name">{item.product_name}</div>
                         <div className="item-meta">
-                          {item.sku} · {item.hsn_code}
+                          {item.sku}
+                          {item.variant_size && ` · Size: ${item.variant_size}`}
+                          {item.variant_color && ` · ${item.variant_color}`}
                           {item.stock_qty !== undefined && item.stock_qty <= 10 && (
                             <span className="low-stock-badge"> · ⚠️ {item.stock_qty} left</span>
                           )}
@@ -416,7 +417,6 @@ export default function Billing({ cashier, onLogout }) {
                         </div>
                       </td>
                       <td className="price">{formatPrice(item.unit_price)}</td>
-                      <td className="price" style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{formatPrice(item.tax)}</td>
                       <td className="line-total">{formatPrice(item.line_total)}</td>
                       <td>
                         <button className="void-btn" onClick={() => voidItem(item.id)} title="Void item">✕</button>
@@ -440,10 +440,6 @@ export default function Billing({ cashier, onLogout }) {
                 <span className="amount">−{formatPrice(txn?.total_discount)}</span>
               </div>
             )}
-            <div className="totals-row tax">
-              <span className="label">Tax (GST)</span>
-              <span className="amount">{formatPrice(txn?.tax_amount)}</span>
-            </div>
             <hr className="totals-divider" />
             <div className="totals-row grand-total">
               <span className="label">GRAND TOTAL</span>
@@ -960,7 +956,7 @@ function ReceiptModal({ data, onClose }) {
   const printReceipt = () => {
     const w = window.open('', '', 'width=400,height=600')
     const receiptEl = document.querySelector('.receipt')
-    w.document.write(`<html><head><title>Receipt</title>
+    w.document.write(`<html><head><title>Bill - ${data.bill_number}</title>
       <style>body{font-family:monospace;font-size:12px;padding:20px;max-width:350px;margin:0 auto;}
       table{width:100%;border-collapse:collapse;}td,th{padding:2px 4px;text-align:left;font-size:11px;}
       th{border-bottom:1px solid #000;}.right{text-align:right;}.center{text-align:center;}
@@ -980,13 +976,14 @@ function ReceiptModal({ data, onClose }) {
   return (
     <div className="modal-overlay">
       <div className="modal receipt-modal">
-        <h2>🧾 Receipt <button className="modal-close" onClick={onClose}>✕</button></h2>
+        <h2>🧾 Bill <button className="modal-close" onClick={onClose}>✕</button></h2>
 
         <div className="receipt">
-          <div className="store-header">
-            <h3>{data.store.name}</h3>
-            <p>{data.store.address}</p>
-            <p>GSTIN: {data.store.gstin}</p>
+          <div className="store-header" style={{ textAlign: 'center', marginBottom: '8px' }}>
+            <h3 style={{ margin: '0 0 4px' }}>{data.store?.name}</h3>
+            <p style={{ margin: '0 0 2px' }}>{data.store?.address}</p>
+            {data.store?.phone && <p style={{ margin: '0' }}>Phone: {data.store.phone}</p>}
+            <h4 style={{ margin: '6px 0 2px', textTransform: 'uppercase', letterSpacing: '1px' }}>{data.bill_title || 'Bill'}</h4>
           </div>
 
           <div className="bill-info">
@@ -998,14 +995,16 @@ function ReceiptModal({ data, onClose }) {
 
           <table className="items-table">
             <thead>
-              <tr><th>Item</th><th>HSN</th><th>Qty</th><th>Price</th><th className="right">Amt</th></tr>
+              <tr><th>Item</th><th className="center">Qty</th><th>MRP</th><th className="right">Amt</th></tr>
             </thead>
             <tbody>
               {data.items?.map((item, i) => (
                 <tr key={i}>
-                  <td>{item.product_name}</td>
-                  <td><code>{item.hsn_code || '—'}</code></td>
-                  <td>{item.quantity}</td>
+                  <td>
+                    {item.product_name}
+                    {item.variant_size && ` (${item.variant_size})`}
+                  </td>
+                  <td className="center">{item.quantity}</td>
                   <td>₹{item.unit_price?.toFixed(2)}</td>
                   <td className="right">₹{item.line_total?.toFixed(2)}</td>
                 </tr>
@@ -1018,36 +1017,12 @@ function ReceiptModal({ data, onClose }) {
             {data.discount > 0 && (
               <div className="row"><span>Discount{data.coupon ? ` (${data.coupon.code})` : ''}</span><span>-₹{data.discount?.toFixed(2)}</span></div>
             )}
-            <div className="row"><span>CGST (Central Tax)</span><span>₹{(data.cgst ?? (data.tax / 2))?.toFixed(2)}</span></div>
-            <div className="row"><span>SGST (State Tax)</span><span>₹{(data.sgst ?? (data.tax / 2))?.toFixed(2)}</span></div>
-            <div className="row grand"><span>GRAND TOTAL</span><span>₹{data.grand_total?.toFixed(2)}</span></div>
+            <div className="row grand"><span>TOTAL PAYABLE</span><span>₹{data.grand_total?.toFixed(2)}</span></div>
           </div>
-
-          {data.tax_summary?.length > 0 && (
-            <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #ccc', fontSize: '10px' }}>
-              <div style={{ fontWeight: 700, marginBottom: '4px' }}>GST Tax Summary:</div>
-              <table style={{ width: '100%', fontSize: '10px', textAlign: 'left' }}>
-                <thead>
-                  <tr><th>HSN</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>Tax</th></tr>
-                </thead>
-                <tbody>
-                  {data.tax_summary.map((ts, idx) => (
-                    <tr key={idx}>
-                      <td>{ts.hsn}</td>
-                      <td>₹{ts.taxable_value?.toFixed(2)}</td>
-                      <td>{ts.cgst_rate}%: ₹{ts.cgst_amount?.toFixed(2)}</td>
-                      <td>{ts.sgst_rate}%: ₹{ts.sgst_amount?.toFixed(2)}</td>
-                      <td>₹{ts.total_tax?.toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
           <div className="payment-info">
             {data.payments?.map((p, i) => (
-              <div key={i}>Payment: {p.method.toUpperCase()} — ₹{p.amount?.toFixed(2)}
+              <div key={i}>Payment Mode: {p.method?.toUpperCase()} — ₹{p.amount?.toFixed(2)}
                 {p.change_amount > 0 ? ` (Change: ₹${p.change_amount.toFixed(2)})` : ''}
               </div>
             ))}
@@ -1060,12 +1035,12 @@ function ReceiptModal({ data, onClose }) {
             </div>
           )}
 
-          <div className="footer">
-            ✨ Thank you! Visit again! ✨
+          <div className="footer" style={{ textAlign: 'center', marginTop: '12px' }}>
+            <p style={{ margin: '4px 0', fontSize: '11px' }}>{data.store?.footer_text || 'Thank you! Visit again!'}</p>
           </div>
         </div>
 
-        <button className="print-btn" onClick={printReceipt}>🖨️ Print Receipt</button>
+        <button className="print-btn" onClick={printReceipt}>🖨️ Print Bill</button>
         <button className="modal-btn secondary" style={{ width: '100%', marginTop: '8px' }} onClick={onClose}>
           ✅ Done — New Bill
         </button>
