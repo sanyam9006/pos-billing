@@ -256,23 +256,78 @@ export default function Settings() {
           <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
             <span>🛡️</span> Security & Approvals
           </h2>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Supervisor / Owner PIN Approval Threshold for Discounts (₹)
-            </label>
-            <div className="relative max-w-xs">
-              <span className="absolute left-3 top-2.5 text-gray-400 text-sm">₹</span>
-              <input
-                type="number"
-                name="DISCOUNT_PIN_THRESHOLD"
-                value={settings.DISCOUNT_PIN_THRESHOLD}
-                onChange={handleChange}
-                className="w-full p-2.5 pl-8 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Discount PIN Approval Threshold (₹)
+              </label>
+              <div className="relative max-w-xs">
+                <span className="absolute left-3 top-2.5 text-gray-400 text-sm">₹</span>
+                <input
+                  type="number"
+                  name="DISCOUNT_PIN_THRESHOLD"
+                  value={settings.DISCOUNT_PIN_THRESHOLD || 500}
+                  onChange={handleChange}
+                  className="w-full p-2.5 pl-8 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <span className="text-xs text-gray-400 mt-1 block">
+                Discounts exceeding ₹{settings.DISCOUNT_PIN_THRESHOLD || 500} require Supervisor PIN.
+              </span>
             </div>
-            <span className="text-xs text-gray-400 mt-1 block">
-              Any discount exceeding ₹{settings.DISCOUNT_PIN_THRESHOLD || 500} will prompt for Supervisor PIN before being applied to the bill.
-            </span>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Rental Price Override PIN Threshold (₹)
+              </label>
+              <div className="relative max-w-xs">
+                <span className="absolute left-3 top-2.5 text-gray-400 text-sm">₹</span>
+                <input
+                  type="number"
+                  name="RENT_OVERRIDE_PIN_THRESHOLD"
+                  value={settings.RENT_OVERRIDE_PIN_THRESHOLD || 500}
+                  onChange={handleChange}
+                  className="w-full p-2.5 pl-8 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                />
+              </div>
+              <span className="text-xs text-gray-400 mt-1 block">
+                Rental manual price changes exceeding ₹{settings.RENT_OVERRIDE_PIN_THRESHOLD || 500} require Supervisor PIN.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3: Rental Policies */}
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
+            <span>👘</span> Bridal & Occasion Wear Rental Policies
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Per-Day Rental: Count Pickup Day</label>
+              <select
+                name="RENTAL_COUNT_PICKUP_DAY"
+                value={settings.RENTAL_COUNT_PICKUP_DAY ?? '1'}
+                onChange={handleChange}
+                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+              >
+                <option value="1">Yes — Count pickup day (same day return = 1 day, 2 days = 2 days)</option>
+                <option value="0">No — Calendar difference only (24hr blocks)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Early Return Policy (Per-Day)</label>
+              <select
+                name="RENTAL_EARLY_RETURN_REFUND"
+                value={settings.RENTAL_EARLY_RETURN_REFUND ?? '0'}
+                onChange={handleChange}
+                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
+              >
+                <option value="0">No automatic refund for early return (store policy standard)</option>
+                <option value="1">Enable pro-rated refund for unused days (PER_DAY only)</option>
+              </select>
+            </div>
           </div>
         </div>
 

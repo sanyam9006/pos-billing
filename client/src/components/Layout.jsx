@@ -48,6 +48,10 @@ export default function Layout({ cashier, onLogout }) {
             <span className="nav-icon">✂️</span>
             <span>Custom & Alterations</span>
           </NavLink>
+          <NavLink to="/rentals" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            <span className="nav-icon">👘</span>
+            <span>Rentals</span>
+          </NavLink>
           {isSupervisor && (
             <>
               <NavLink to="/reports" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>

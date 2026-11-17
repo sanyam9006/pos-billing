@@ -10,6 +10,7 @@ import Reports from './pages/Reports'
 import Refunds from './pages/Refunds'
 import PurchaseOrders from './pages/PurchaseOrders'
 import CustomOrders from './pages/CustomOrders'
+import Rentals from './pages/Rentals'
 import Settings from './pages/Settings'
 
 const SESSION_KEY = 'pos_cashier_session'
@@ -58,6 +59,7 @@ function App() {
           <Route path="/products" element={<Products cashier={cashier} />} />
           <Route path="/customers" element={<Customers cashier={cashier} />} />
           <Route path="/custom-orders" element={<CustomOrders cashier={cashier} />} />
+          <Route path="/rentals" element={<Rentals cashier={cashier} />} />
           {isSupervisor && (
             <>
               <Route path="/reports" element={<Reports cashier={cashier} />} />

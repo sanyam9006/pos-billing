@@ -31,6 +31,7 @@ export default function Reports() {
         case 'top-products': url = `/api/reports/top-products?limit=20&from=${dateRange.from}&to=${dateRange.to}`; break
         case 'slow-movers': url = `/api/reports/slow-movers?days=30&max_sold=2`; break
         case 'cashier': url = `/api/reports/cashier-sales?from=${dateRange.from}&to=${dateRange.to}`; break
+        case 'rental-income': url = `/api/rentals/reports/income?from=${dateRange.from}&to=${dateRange.to}`; break
         case 'low-stock': url = '/api/reports/low-stock?threshold=20'; break
       }
       const res = await authFetch(url)
@@ -65,6 +66,7 @@ export default function Reports() {
     { id: 'profit', label: '💰 Profit & Margin', desc: 'Cost vs Revenue' },
     { id: 'daily', label: '📅 Daily Sales', desc: 'Date range trends' },
     { id: 'top-products', label: '🏆 Top Sellers', desc: 'Best selling items' },
+    { id: 'rental-income', label: '👘 Rental Income', desc: 'Per-day vs per-event' },
     { id: 'slow-movers', label: '🐢 Slow Movers', desc: 'Dead / low stock' },
     { id: 'customer-history', label: '👤 Customer Spend', desc: 'Visit & bill history' },
     { id: 'cashier', label: '👥 Staff Sales', desc: 'Per employee' },
@@ -102,7 +104,7 @@ export default function Reports() {
         </div>
       )}
 
-      {['daily', 'profit', 'top-products', 'cashier'].includes(activeTab) && (
+      {['daily', 'profit', 'top-products', 'cashier', 'rental-income'].includes(activeTab) && (
         <div className="date-controls flex items-center justify-between">
           <div className="flex items-center gap-3">
             <label>From:</label>
@@ -363,6 +365,82 @@ export default function Reports() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════ RENTAL INCOME ═══════════ */}
+          {activeTab === 'rental-income' && data.summary && (
+            <div>
+              <div className="metric-cards mb-6">
+                <div className="metric-card">
+                  <div className="metric-label">Net Rental Revenue</div>
+                  <div className="metric-val text-emerald-600 font-bold">{formatPrice(data.summary.net_rental_income)}</div>
+                  <div className="text-xs text-gray-500">{data.summary.total_orders} total orders</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">☀️ Per-Day Rental Revenue</div>
+                  <div className="metric-val text-teal-600">{formatPrice(data.summary.per_day_revenue)}</div>
+                  <div className="text-xs text-gray-500">{data.summary.per_day_orders} daily bookings</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">🎉 Per-Event Rental Revenue</div>
+                  <div className="metric-val text-purple-600">{formatPrice(data.summary.per_event_revenue)}</div>
+                  <div className="text-xs text-gray-500">{data.summary.per_event_orders} event bookings</div>
+                </div>
+                <div className="metric-card">
+                  <div className="metric-label">Late Fees Collected</div>
+                  <div className="metric-val text-amber-600">{formatPrice(data.summary.total_late_fees)}</div>
+                  <div className="text-xs text-gray-500">Early refunds: {formatPrice(data.summary.total_early_refunds)}</div>
+                </div>
+              </div>
+
+              <div className="report-section">
+                <h3>Rental Bookings Breakdown ({data.orders ? data.orders.length : 0})</h3>
+                <div className="table-responsive">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Order #</th>
+                        <th>Garment</th>
+                        <th>Customer</th>
+                        <th>Pricing Mode</th>
+                        <th>Period</th>
+                        <th>Rent Charged</th>
+                        <th>Late Fee</th>
+                        <th>Deposit Refunded</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(data.orders || []).map(o => (
+                        <tr key={o.id}>
+                          <td className="font-mono text-xs font-bold">{o.order_number}</td>
+                          <td className="font-medium">{o.item_name}</td>
+                          <td>{o.customer_name} ({o.customer_phone})</td>
+                          <td>
+                            <span className={`badge ${o.pricing_mode === 'PER_DAY' ? 'badge-info' : 'badge-purple'}`}>
+                              {o.pricing_mode === 'PER_DAY' ? '☀️ Per Day' : '🎉 Per Event'} (₹{o.applied_rate})
+                            </span>
+                          </td>
+                          <td className="text-xs">{o.rent_date} to {o.due_date} ({o.billed_days}d)</td>
+                          <td className="font-bold text-emerald-700">{formatPrice(o.final_rent)}</td>
+                          <td className={o.late_fee > 0 ? 'text-red-600 font-bold' : 'text-gray-400'}>
+                            {o.late_fee > 0 ? `+${formatPrice(o.late_fee)}` : '₹0.00'}
+                          </td>
+                          <td className="text-green-700">
+                            {o.status === 'returned' ? formatPrice(o.deposit_refunded) : 'Held'}
+                          </td>
+                          <td>
+                            <span className={`badge ${o.status === 'returned' ? 'badge-success' : 'badge-warning'}`}>
+                              {o.status === 'returned' ? 'Returned' : 'Active'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
