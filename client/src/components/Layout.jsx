@@ -20,7 +20,11 @@ export default function Layout({ cashier, onLogout }) {
     <div className="app-layout">
       <nav className="sidebar">
         <div className="sidebar-header">
-          <span className="sidebar-logo">👗</span>
+          <img
+            src="/logo.png"
+            alt={storeName}
+            style={{ width: '38px', height: '38px', borderRadius: '50%', objectFit: 'contain', background: '#fff', padding: '2px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}
+          />
           <div>
             <div className="sidebar-title">{storeName}</div>
             <div className="sidebar-subtitle">Boutique POS</div>

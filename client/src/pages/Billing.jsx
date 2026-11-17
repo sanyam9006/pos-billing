@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { authFetch, API, formatPrice } from '../utils/api'
+import { STORE_LOGO_BASE64 } from '../utils/logo'
 
 export default function Billing({ cashier, onLogout }) {
   const [txn, setTxn] = useState(null)
@@ -953,18 +954,59 @@ function CouponModal({ onApply, onClose }) {
    RECEIPT MODAL
    ═══════════════════════════ */
 function ReceiptModal({ data, onClose }) {
+  const logoSrc = data.store?.logo || STORE_LOGO_BASE64
+
   const printReceipt = () => {
-    const w = window.open('', '', 'width=400,height=600')
+    const w = window.open('', '', 'width=450,height=650')
     const receiptEl = document.querySelector('.receipt')
-    w.document.write(`<html><head><title>Bill - ${data.bill_number}</title>
-      <style>body{font-family:monospace;font-size:12px;padding:20px;max-width:350px;margin:0 auto;}
-      table{width:100%;border-collapse:collapse;}td,th{padding:2px 4px;text-align:left;font-size:11px;}
-      th{border-bottom:1px solid #000;}.right{text-align:right;}.center{text-align:center;}
-      hr{border:none;border-top:1px dashed #000;margin:8px 0;}.bold{font-weight:bold;}</style>
+    const is58mm = data.store?.thermal_width === '58mm'
+    const isA4 = data.store?.thermal_width === 'a4'
+
+    w.document.write(`<!DOCTYPE html><html><head><title>Bill - ${data.bill_number}</title>
+      <style>
+        * { box-sizing: border-box; }
+        body {
+          font-family: monospace, system-ui, -apple-system, sans-serif;
+          font-size: ${is58mm ? '10px' : isA4 ? '13px' : '12px'};
+          padding: ${isA4 ? '24px' : '16px'};
+          max-width: ${is58mm ? '240px' : isA4 ? '720px' : '340px'};
+          margin: 0 auto;
+          color: #000;
+          background: #fff;
+        }
+        .bill-logo {
+          width: ${is58mm ? '55px' : isA4 ? '90px' : '72px'};
+          height: ${is58mm ? '55px' : isA4 ? '90px' : '72px'};
+          border-radius: 50%;
+          object-fit: contain;
+          margin: 0 auto 6px;
+          display: block;
+        }
+        .store-header { text-align: center; margin-bottom: 8px; }
+        .store-name { font-size: ${is58mm ? '14px' : isA4 ? '20px' : '16px'}; font-weight: 800; margin: 0 0 2px; }
+        .store-sub { font-size: ${is58mm ? '9px' : '11px'}; margin: 0 0 2px; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+        td, th { padding: 3px 4px; text-align: left; font-size: ${is58mm ? '9.5px' : '11px'}; }
+        th { border-bottom: 1px solid #000; }
+        .right { text-align: right; }
+        .center { text-align: center; }
+        .totals-section { margin-top: 8px; border-top: 1px dashed #000; padding-top: 6px; }
+        .row { display: flex; justify-content: space-between; font-size: ${is58mm ? '10px' : '12px'}; margin-bottom: 3px; }
+        .row.grand { font-size: ${is58mm ? '13px' : '15px'}; font-weight: 800; border-top: 1px solid #000; padding-top: 4px; margin-top: 4px; }
+        .payment-info { font-size: ${is58mm ? '9px' : '11px'}; border-top: 1px dashed #000; padding-top: 6px; margin-top: 6px; }
+        .footer { text-align: center; margin-top: 12px; font-size: ${is58mm ? '9px' : '11px'}; }
+        @media print {
+          body { padding: 0; }
+          button { display: none; }
+        }
+      </style>
       </head><body>${receiptEl.innerHTML}</body></html>`)
     w.document.close()
-    w.print()
-    w.close()
+    w.focus()
+    setTimeout(() => {
+      w.print()
+      w.close()
+    }, 250)
   }
 
   const fmtDt = (s) => {
@@ -980,9 +1022,24 @@ function ReceiptModal({ data, onClose }) {
 
         <div className="receipt">
           <div className="store-header" style={{ textAlign: 'center', marginBottom: '8px' }}>
-            <h3 style={{ margin: '0 0 4px' }}>{data.store?.name}</h3>
-            <p style={{ margin: '0 0 2px' }}>{data.store?.address}</p>
-            {data.store?.phone && <p style={{ margin: '0' }}>Phone: {data.store.phone}</p>}
+            {logoSrc && (
+              <img
+                src={logoSrc}
+                alt={data.store?.name || 'House of Sadaya'}
+                className="bill-logo"
+                style={{
+                  width: '72px',
+                  height: '72px',
+                  borderRadius: '50%',
+                  objectFit: 'contain',
+                  margin: '0 auto 6px',
+                  display: 'block'
+                }}
+              />
+            )}
+            <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: 800 }}>{data.store?.name}</h3>
+            <p style={{ margin: '0 0 2px', fontSize: '11px' }}>{data.store?.address}</p>
+            {data.store?.phone && <p style={{ margin: '0', fontSize: '11px' }}>Phone: {data.store.phone}</p>}
             <h4 style={{ margin: '6px 0 2px', textTransform: 'uppercase', letterSpacing: '1px' }}>{data.bill_title || 'Bill'}</h4>
           </div>
 

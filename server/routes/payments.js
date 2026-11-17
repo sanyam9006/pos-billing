@@ -184,11 +184,18 @@ router.get('/receipt/:txnId', (req, res) => {
     ? db.prepare('SELECT code, type, value FROM coupons WHERE id = ?').get(txn.coupon_id)
     : null;
 
+  let defaultLogo = '';
+  try {
+    const { STORE_LOGO_BASE64 } = require('../utils/logo');
+    defaultLogo = STORE_LOGO_BASE64;
+  } catch (_) {}
+
   const storeInfo = {
-    name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
-    address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001'),
-    phone: getSetting('STORE_PHONE', '+91 98765 43210'),
-    footer_text: getSetting('FOOTER_TEXT', 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact.'),
+    name: getSetting('STORE_NAME', 'House of Sadaya'),
+    address: getSetting('STORE_ADDRESS', '4/8 Housing board Tonk Rajasthan'),
+    phone: getSetting('STORE_PHONE', '7568458575'),
+    logo: getSetting('STORE_LOGO', defaultLogo),
+    footer_text: getSetting('FOOTER_TEXT', 'Thank you for shopping at House of Sadaya! Exchange within 7 days with tag intact.'),
     thermal_width: getSetting('THERMAL_WIDTH', '80mm')
   };
 

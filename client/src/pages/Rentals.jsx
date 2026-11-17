@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice, getStoreConfig } from '../utils/api'
 import { BarcodeSvg } from '../utils/barcode'
+import { STORE_LOGO_BASE64 } from '../utils/logo'
 import ScanPromptModal from '../components/ScanPromptModal'
 
 export default function Rentals({ cashier }) {
@@ -1063,6 +1064,7 @@ function RentalSlipModal({ data, onClose }) {
       </head>
       <body>
         <div class="header">
+          ${(store.logo || STORE_LOGO_BASE64) ? `<img src="${store.logo || STORE_LOGO_BASE64}" alt="House of Sadaya" style="width: 68px; height: 68px; border-radius: 50%; object-fit: contain; margin: 0 auto 6px; display: block;" />` : ''}
           <div class="store-name">${store.name}</div>
           <div class="store-sub">${store.address}</div>
           <div class="store-sub">Tel: ${store.phone}</div>
@@ -1135,8 +1137,14 @@ function RentalSlipModal({ data, onClose }) {
 
         <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: '6px', padding: '16px', fontSize: '13px', margin: '14px 0' }}>
           <div style={{ textAlign: 'center', borderBottom: '1px dashed var(--border)', paddingBottom: '10px', marginBottom: '10px' }}>
+            <img
+              src={store.logo || STORE_LOGO_BASE64}
+              alt={store.name || 'House of Sadaya'}
+              style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'contain', margin: '0 auto 6px', display: 'block' }}
+            />
             <div style={{ fontWeight: 800, fontSize: '15px' }}>{store.name}</div>
-            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{store.phone}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{store.address}</div>
+            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Tel: {store.phone}</div>
             <div style={{ fontWeight: 700, marginTop: '4px' }}>RENTAL AGREEMENT & RECEIPT</div>
           </div>
 

@@ -8,7 +8,7 @@ export async function getStoreConfig(forceRefresh = false) {
     const res = await fetch('/api/config')
     _storeConfig = await res.json()
   } catch {
-    _storeConfig = { store_name: 'Aura Fashion Boutique', currency_symbol: '₹', business_type: 'boutique' }
+    _storeConfig = { store_name: 'House of Sadaya', currency_symbol: '₹', business_type: 'boutique' }
   }
   return _storeConfig
 }

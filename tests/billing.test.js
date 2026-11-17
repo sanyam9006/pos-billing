@@ -112,7 +112,7 @@ describe('Transactions & recalcTotals (Tax-Inclusive)', () => {
       .set(authHeader(cashierToken))
       .send({ cashier_id: cashierId });
     expect(res.status).toBe(200);
-    expect(res.body.bill_number).toMatch(/^(AB|SM)-\d{8}-\d{4}$/);
+    expect(res.body.bill_number).toMatch(/^(HOS|AB|SM)-\d{8}-\d{4}$/);
     txnId = res.body.id;
   });
 
@@ -308,7 +308,7 @@ describe('Payment Completion', () => {
     expect(res.status).toBe(200);
     expect(res.body.store).toBeDefined();
     expect(res.body.bill_title).toBe('Bill');
-    expect(res.body.bill_number).toMatch(/^(AB|SM)-/);
+    expect(res.body.bill_number).toMatch(/^(HOS|AB|SM)-/);
     expect(res.body.items.length).toBeGreaterThan(0);
     expect(res.body.payments.length).toBeGreaterThan(0);
     const receiptStr = JSON.stringify(res.body);

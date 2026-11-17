@@ -572,7 +572,7 @@ function BarcodePriceTagModal({ product, onClose }) {
           }}
         >
           <div style={{ fontSize: '13px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            {store?.store_name || 'AURA BOUTIQUE'}
+            {store?.store_name || 'HOUSE OF SADAYA'}
           </div>
           <div style={{ fontSize: '13px', fontWeight: 700, margin: '4px 0' }}>
             {product.name}

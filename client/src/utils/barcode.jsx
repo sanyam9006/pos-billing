@@ -86,7 +86,7 @@ export const LABEL_SIZES = [
  * Generate full printable HTML for thermal barcode tags or A4 sheet
  */
 export function generateTagPrintHtml(items, store, labelSize = '50x25') {
-  const storeName = store?.store_name || 'AURA BOUTIQUE'
+  const storeName = store?.store_name || 'HOUSE OF SADAYA'
   const isA4 = labelSize === 'a4'
   const isCompact = labelSize === '38x25'
 

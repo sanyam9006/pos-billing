@@ -451,4 +451,31 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
       expect(JSON.stringify(reportRes.body)).not.toMatch(forbidden);
     });
   });
+
+  // ── 7. HOUSE OF SADAYA BRANDING & LOGO ON BILLS ──
+  describe('House of Sadaya Branding & Logo on Bills', () => {
+    test('Store config endpoint returns House of Sadaya details and logo', async () => {
+      const res = await request(app).get('/api/config');
+      expect(res.status).toBe(200);
+      expect(res.body.store_name).toBe('House of Sadaya');
+      expect(res.body.store_address).toBe('4/8 Housing board Tonk Rajasthan');
+      expect(res.body.store_phone).toBe('7568458575');
+      expect(res.body.store_logo).toMatch(/^data:image\/png;base64,/);
+    });
+
+    test('Rental slip includes House of Sadaya branding and logo', async () => {
+      const ordersRes = await request(app)
+        .get('/api/rentals/orders')
+        .set(authHeader(cashierToken));
+      const slipRes = await request(app)
+        .get(`/api/rentals/orders/${ordersRes.body[0].id}/slip`)
+        .set(authHeader(cashierToken));
+
+      expect(slipRes.status).toBe(200);
+      expect(slipRes.body.store.name).toBe('House of Sadaya');
+      expect(slipRes.body.store.address).toBe('4/8 Housing board Tonk Rajasthan');
+      expect(slipRes.body.store.phone).toBe('7568458575');
+      expect(slipRes.body.store.logo).toMatch(/^data:image\/png;base64,/);
+    });
+  });
 });

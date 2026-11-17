@@ -298,13 +298,20 @@ migrations.forEach(sql => {
 });
 
 // Seed default boutique settings if missing
+let defaultLogo = '';
+try {
+  const { STORE_LOGO_BASE64 } = require('./utils/logo');
+  defaultLogo = STORE_LOGO_BASE64;
+} catch (_) {}
+
 const defaultSettings = [
-  ['STORE_NAME', 'Aura Fashion Boutique', 'Boutique trade name printed on receipts'],
-  ['STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001', 'Store physical address'],
-  ['STORE_PHONE', '+91 98765 43210', 'Store contact phone number'],
-  ['BILL_PREFIX', 'AB-', 'Prefix for generated invoice/bill numbers (e.g. AB-20261117-0001)'],
+  ['STORE_NAME', 'House of Sadaya', 'Boutique trade name printed on receipts'],
+  ['STORE_ADDRESS', '4/8 Housing board Tonk Rajasthan', 'Store physical address'],
+  ['STORE_PHONE', '7568458575', 'Store contact phone number'],
+  ['BILL_PREFIX', 'HOS-', 'Prefix for generated invoice/bill numbers (e.g. HOS-20261117-0001)'],
+  ['STORE_LOGO', defaultLogo, 'Store logo image (base64 data URL)'],
   ['DISCOUNT_PIN_THRESHOLD', '500', 'Discounts exceeding this amount in Rupees require Supervisor/Owner PIN approval'],
-  ['FOOTER_TEXT', 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact. No refund.', 'Receipt footer text'],
+  ['FOOTER_TEXT', 'Thank you for shopping at House of Sadaya! Exchange within 7 days with tag intact. No refund.', 'Receipt footer text'],
   ['THERMAL_WIDTH', '80mm', 'Receipt print width format: 80mm, 58mm, or A4'],
   ['RENTAL_COUNT_PICKUP_DAY', '1', 'Rental day calculation: 1 to count pickup day (e.g. Fri to Sun = 3 days), 0 for day difference only (2 days)'],
   ['RENTAL_EARLY_RETURN_REFUND', '0', 'Early rental return: 1 for pro-rated refund (PER_DAY mode only), 0 for no automatic early refund'],

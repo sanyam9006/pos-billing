@@ -56,10 +56,17 @@ router.get('/:id/slip', (req, res) => {
   const order = db.prepare('SELECT * FROM custom_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Order not found' });
 
+  let defaultLogo = '';
+  try {
+    const { STORE_LOGO_BASE64 } = require('../utils/logo');
+    defaultLogo = STORE_LOGO_BASE64;
+  } catch (_) {}
+
   const store = {
-    name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
-    phone: getSetting('STORE_PHONE', '+91 98765 43210'),
-    address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001')
+    name: getSetting('STORE_NAME', 'House of Sadaya'),
+    phone: getSetting('STORE_PHONE', '7568458575'),
+    address: getSetting('STORE_ADDRESS', '4/8 Housing board Tonk Rajasthan'),
+    logo: getSetting('STORE_LOGO', defaultLogo)
   };
 
   let measurements = {};

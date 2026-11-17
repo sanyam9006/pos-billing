@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice } from '../utils/api'
+import { STORE_LOGO_BASE64 } from '../utils/logo'
 
 export default function CustomOrders({ cashier }) {
   const [orders, setOrders] = useState([])
@@ -96,9 +97,12 @@ export default function CustomOrders({ cashier }) {
       </head>
       <body>
         <div class="header">
-          <div class="order-no">${order.order_number}</div>
-          <div style="font-weight: 700; font-size: 15px;">Tailoring & Alteration Job Card</div>
-          <div>Date: ${new Date(order.created_at).toLocaleDateString('en-IN')}</div>
+          <img src="${STORE_LOGO_BASE64}" alt="House of Sadaya" style="width: 65px; height: 65px; border-radius: 50%; object-fit: contain; margin: 0 auto 6px; display: block;" />
+          <div style="font-weight: 800; font-size: 16px; text-transform: uppercase;">House of Sadaya</div>
+          <div style="font-size: 11px; color: #555;">4/8 Housing board Tonk Rajasthan · Tel: 7568458575</div>
+          <div class="order-no" style="margin-top: 8px;">${order.order_number}</div>
+          <div style="font-weight: 700; font-size: 14px;">Tailoring & Alteration Job Card</div>
+          <div style="font-size: 11px;">Date: ${new Date(order.created_at).toLocaleDateString('en-IN')}</div>
         </div>
 
         <div>

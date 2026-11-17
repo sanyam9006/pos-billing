@@ -21,8 +21,13 @@ const clientDistPath = path.join(__dirname, '../client/dist');
 if (fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));
 }
+const clientPublicPath = path.join(__dirname, '../client/public');
+if (fs.existsSync(clientPublicPath)) {
+  app.use(express.static(clientPublicPath));
+}
 
 const { getSetting } = require('./utils/settings');
+const { STORE_LOGO_BASE64 } = require('./utils/logo');
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -32,14 +37,15 @@ app.get('/api/health', (req, res) => {
 // Store config (public — used by frontend for branding)
 app.get('/api/config', (req, res) => {
   res.json({
-    store_name: getSetting('STORE_NAME', 'Aura Fashion Boutique'),
-    store_address: getSetting('STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001'),
-    store_phone: getSetting('STORE_PHONE', '+91 98765 43210'),
+    store_name: getSetting('STORE_NAME', 'House of Sadaya'),
+    store_address: getSetting('STORE_ADDRESS', '4/8 Housing board Tonk Rajasthan'),
+    store_phone: getSetting('STORE_PHONE', '7568458575'),
+    store_logo: getSetting('STORE_LOGO', STORE_LOGO_BASE64),
     currency_symbol: '₹',
     business_type: 'boutique',
-    bill_prefix: getSetting('BILL_PREFIX', 'AB-'),
+    bill_prefix: getSetting('BILL_PREFIX', 'HOS-'),
     thermal_width: getSetting('THERMAL_WIDTH', '80mm'),
-    footer_text: getSetting('FOOTER_TEXT', 'Thank you for shopping with us!')
+    footer_text: getSetting('FOOTER_TEXT', 'Thank you for shopping at House of Sadaya! Exchange within 7 days with tag intact.')
   });
 });
 

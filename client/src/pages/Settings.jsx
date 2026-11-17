@@ -3,12 +3,12 @@ import { authFetch, clearStoreConfigCache } from '../utils/api'
 
 export default function Settings() {
   const [settings, setSettings] = useState({
-    STORE_NAME: 'Aura Fashion Boutique',
-    STORE_ADDRESS: 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001',
-    STORE_PHONE: '+91 98765 43210',
-    BILL_PREFIX: 'AB-',
+    STORE_NAME: 'House of Sadaya',
+    STORE_ADDRESS: '4/8 Housing board Tonk Rajasthan',
+    STORE_PHONE: '7568458575',
+    BILL_PREFIX: 'HOS-',
     DISCOUNT_PIN_THRESHOLD: '500',
-    FOOTER_TEXT: 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact.',
+    FOOTER_TEXT: 'Thank you for shopping at House of Sadaya! Exchange within 7 days with tag intact.',
     THERMAL_WIDTH: '80mm'
   })
 
@@ -181,6 +181,17 @@ export default function Settings() {
           <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
             <span>👗</span> Boutique Identity & Receipts
           </h2>
+          <div className="flex items-center gap-4 mb-4 pb-4 border-b">
+            <img
+              src="/logo.png"
+              alt="House of Sadaya Logo"
+              style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'contain', background: '#fff', border: '1px solid #e5e7eb' }}
+            />
+            <div>
+              <div className="font-bold text-gray-800 text-sm">Official Boutique Logo</div>
+              <div className="text-xs text-gray-500">Active and printed at the top of every sales bill, rental agreement slip, and tailoring job card</div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1">Store / Brand Name</label>
