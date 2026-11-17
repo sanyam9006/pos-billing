@@ -1,16 +1,20 @@
 const API = '/api'
 
-// Store config — loaded once and cached
+// Store config — loaded and cached, can be invalidated on settings update
 let _storeConfig = null
-export async function getStoreConfig() {
-  if (_storeConfig) return _storeConfig
+export async function getStoreConfig(forceRefresh = false) {
+  if (_storeConfig && !forceRefresh) return _storeConfig
   try {
     const res = await fetch('/api/config')
     _storeConfig = await res.json()
   } catch {
-    _storeConfig = { store_name: 'POS System', currency_symbol: '₹', business_type: 'retail' }
+    _storeConfig = { store_name: 'Aura Fashion Boutique', currency_symbol: '₹', business_type: 'boutique' }
   }
   return _storeConfig
+}
+
+export function clearStoreConfigCache() {
+  _storeConfig = null
 }
 
 // Fetch with auth — reads JWT from localStorage, auto-logout on 401

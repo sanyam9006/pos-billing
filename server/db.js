@@ -186,6 +186,25 @@ db.exec(`
     balance_remaining REAL NOT NULL,
     reason TEXT,
     status TEXT DEFAULT 'active' CHECK(status IN ('active', 'redeemed', 'expired')),
+    expires_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    description TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cashier_id INTEGER,
+    cashier_name TEXT,
+    action TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    details_json TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -200,14 +219,51 @@ db.exec(`
 `);
 
 // Safe migrations for optional columns
-try {
-  db.exec("ALTER TABLE products ADD COLUMN variant_size TEXT");
-} catch (_) {}
-try {
-  db.exec("ALTER TABLE products ADD COLUMN variant_color TEXT");
-} catch (_) {}
-try {
-  db.exec("ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0");
-} catch (_) {}
+const migrations = [
+  "ALTER TABLE products ADD COLUMN variant_size TEXT",
+  "ALTER TABLE products ADD COLUMN variant_color TEXT",
+  "ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0",
+  "ALTER TABLE transactions ADD COLUMN transaction_type TEXT DEFAULT 'sale'",
+  "ALTER TABLE transactions ADD COLUMN exchange_for_bill TEXT",
+  "ALTER TABLE transactions ADD COLUMN discount_reason TEXT",
+  "ALTER TABLE transactions ADD COLUMN discount_approved_by INTEGER",
+  "ALTER TABLE transactions ADD COLUMN is_interstate INTEGER DEFAULT 0",
+  "ALTER TABLE transaction_items ADD COLUMN is_return INTEGER DEFAULT 0",
+  "ALTER TABLE transaction_items ADD COLUMN tax_included REAL DEFAULT 0",
+  "ALTER TABLE transaction_items ADD COLUMN tax_rate REAL DEFAULT 5.0",
+  "ALTER TABLE transaction_items ADD COLUMN hsn_code TEXT",
+  "ALTER TABLE transaction_items ADD COLUMN discount_reason TEXT",
+  "ALTER TABLE custom_orders ADD COLUMN fabric TEXT",
+  "ALTER TABLE credit_notes ADD COLUMN expires_at DATETIME",
+];
+
+migrations.forEach(sql => {
+  try {
+    db.exec(sql);
+  } catch (_) {}
+});
+
+// Seed default boutique settings if missing
+const defaultSettings = [
+  ['GST_MODE', 'registered', 'GST mode: registered (Tax Invoice with GSTIN/HSN/CGST/SGST) or unregistered (Bill of Supply)'],
+  ['STORE_NAME', 'Aura Fashion Boutique', 'Boutique trade name printed on receipts'],
+  ['STORE_ADDRESS', 'Shop 12, Fashion Street, M.I. Road, Jaipur, Rajasthan 302001', 'Store physical address'],
+  ['STORE_PHONE', '+91 98765 43210', 'Store contact phone number'],
+  ['STORE_GSTIN', '08AAAAA0000A1Z5', 'Goods and Services Tax Identification Number (Rajasthan 08)'],
+  ['STATE_CODE', '08', 'State code for GST (08 = Rajasthan)'],
+  ['BILL_PREFIX', 'AB-', 'Prefix for generated invoice/bill numbers (e.g. AB-20261117-0001)'],
+  ['GARMENT_TAX_THRESHOLD', '2500', 'Apparel GST slab threshold per piece (Rs 2,500 under HSN 61/62/63)'],
+  ['DEFAULT_GST_RATE_LOW', '5.0', 'GST rate for garment per-piece value <= threshold (5%)'],
+  ['DEFAULT_GST_RATE_HIGH', '18.0', 'GST rate for garment per-piece value > threshold (18%)'],
+  ['SLAB_BASED_ON', 'TAG_PRICE', 'Slab decision rule: TAG_PRICE (retail price) or TAXABLE_VALUE. Note: Confirm with CA for Rs 2625-2950 range.'],
+  ['DISCOUNT_PIN_THRESHOLD', '500', 'Discounts exceeding this amount in Rupees require Supervisor/Owner PIN approval'],
+  ['FOOTER_TEXT', 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact. No refund.', 'Receipt footer text'],
+  ['THERMAL_WIDTH', '80mm', 'Receipt print width format: 80mm, 58mm, or A4']
+];
+
+const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)');
+defaultSettings.forEach(([key, val, desc]) => {
+  insertSetting.run(key, val, desc);
+});
 
 module.exports = db;
