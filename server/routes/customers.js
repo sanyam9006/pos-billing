@@ -2,6 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// GET /api/customers/all — List all customers
+router.get('/all', (req, res) => {
+  const customers = db.prepare('SELECT * FROM customers ORDER BY name').all();
+  res.json(customers);
+});
+
 // GET /api/customers/search?phone=
 router.get('/search', (req, res) => {
   const { phone } = req.query;

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getStoreConfig } from '../utils/api'
 
 const API = '/api'
 
@@ -7,6 +8,11 @@ export default function Login({ onLogin }) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [storeName, setStoreName] = useState('POS System')
+
+  useEffect(() => {
+    getStoreConfig().then(c => setStoreName(c.store_name))
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -40,8 +46,8 @@ export default function Login({ onLogin }) {
       <div className="login-card">
         <div className="login-logo">
           <span className="icon">🏪</span>
-          <h1>SuperMart POS</h1>
-          <p>Cashier Billing System</p>
+          <h1>{storeName}</h1>
+          <p>Point of Sale System</p>
         </div>
 
         {error && <div className="login-error">⚠️ {error}</div>}

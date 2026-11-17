@@ -1,31 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-
-const API = '/api'
-
-// Helper: fetch with auth — reads JWT from localStorage, auto-logout on 401
-async function authFetch(url, options = {}) {
-  let token = ''
-  try {
-    const session = JSON.parse(localStorage.getItem('pos_cashier_session') || '{}')
-    token = session.token || ''
-  } catch {}
-
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`,
-      ...(options.headers || {})
-    }
-  })
-
-  if (res.status === 401) {
-    localStorage.removeItem('pos_cashier_session')
-    window.location.reload()
-    throw new Error('Session expired')
-  }
-  return res
-}
+import { authFetch, API, formatPrice } from '../utils/api'
 
 export default function Billing({ cashier, onLogout }) {
   const [txn, setTxn] = useState(null)
@@ -318,7 +292,7 @@ export default function Billing({ cashier, onLogout }) {
     createNewBill()
   }
 
-  const formatPrice = (n) => `₹${(n || 0).toFixed(2)}`
+
   const fmtTime = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   const fmtDate = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 
@@ -330,13 +304,10 @@ export default function Billing({ cashier, onLogout }) {
       {/* Header */}
       <header className="pos-header">
         <div className="store-info">
-          <span className="store-icon">🏪</span>
-          <span className="store-name">SuperMart POS</span>
+          <span className="store-icon">🛒</span>
+          <span className="store-name">Billing</span>
         </div>
         <div className="header-center">
-          <div className="header-info">
-            👤 <span className="value">{cashier.name}</span>
-          </div>
           <div className="header-info">
             📅 <span className="value">{fmtDate(clock)}</span>
           </div>
@@ -346,7 +317,6 @@ export default function Billing({ cashier, onLogout }) {
         </div>
         <div className="header-right">
           {txn && <span className="bill-badge">{txn.bill_number}</span>}
-          <button className="logout-btn" onClick={onLogout}>⏏ Logout</button>
         </div>
       </header>
 

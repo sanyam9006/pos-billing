@@ -1,64 +1,115 @@
-# 🏪 SuperMart POS Billing System
+# POS Billing System
 
-A modern, full-stack Point of Sale (POS) and inventory billing system built with React, Node.js, Express, and SQLite.
+A full-featured **Point of Sale** system built with **React + Node.js + SQLite**. Designed to work for **any retail business** — grocery, pharmacy, electronics, clothing, or any store that needs billing, inventory, and reporting.
 
----
+## Features
 
-## 🎨 Theme & Palette
+| Feature | Status |
+|---------|--------|
+| 🛒 **Billing** — Scan/search products, cart management, coupons | ✅ |
+| 📦 **Product Management** — CRUD, stock adjustment, soft-delete | ✅ |
+| 👥 **Customer Management** — Registration, search, loyalty tiers | ✅ |
+| 💰 **Payments** — Cash, Card, UPI with change calculation | ✅ |
+| 🧾 **Receipts** — Printable thermal-style receipts with tax breakdown | ✅ |
+| ↩️ **Returns & Refunds** — Process returns with stock restoration | ✅ |
+| 📊 **Reports** — X/Z reports, daily sales, top products, low-stock alerts | ✅ |
+| 🔐 **Security** — bcrypt PINs, JWT auth, role-based access, rate limiting | ✅ |
+| 📈 **Dashboard** — Today's sales, payment breakdown, low-stock warnings | ✅ |
+| ✅ **Tests** — 24 integration tests covering full business logic | ✅ |
 
-- **Background**: `#FAF7F2` (Soft warm off-white)
-- **Surface / Card**: `#FFFFFF` with `1px solid #EDE7DD` border
-- **Primary Accent**: `#5B9BD5` (Light, calm blue)
-- **Accent Tint**: `#A8CDE8` (Pale powder blue for hovers & badges)
-- **Secondary Accent**: `#C9A227` (Warm gold for totals & contrast)
-- **Text Primary**: `#2B2622` (Warm near-black)
-- **Text Muted**: `#7A7168` (Warm grey)
-- **Corner Radius**: `10px`
+## Quick Start
 
----
-
-## 🚀 Getting Started
-
-### 1. Install & Seed
 ```bash
-npm run setup
-```
-*(Installs dependencies for both server & client, and seeds the SQLite database)*
+# 1. Install dependencies
+npm install && cd client && npm install && cd ..
 
-### 2. Run Locally
-```bash
+# 2. Configure your business (edit .env)
+cp .env.example .env
+# Set your STORE_NAME, STORE_ADDRESS, STORE_GSTIN, etc.
+
+# 3. Seed the database
+npm run seed
+
+# 4. Start the app
 npm run dev
+# Frontend: http://localhost:5173
+# Backend:  http://localhost:3001
 ```
-- **Frontend App**: `http://localhost:5173`
-- **Backend API**: `http://localhost:3001`
 
----
+**Demo login:** `EMP001` / `1234` (cashier) · `EMP003` / `9999` (supervisor)
 
-## 🔑 Demo Cashier Logins
+## Configuration (.env)
 
-| Employee Code | PIN | Role |
-| :--- | :--- | :--- |
-| `EMP001` | `1234` | Cashier (Rahul Sharma) |
-| `EMP002` | `5678` | Cashier (Priya Patel) |
-| `EMP003` | `9999` | Supervisor (Amit Kumar) |
+All business-specific settings are externalized — no code changes needed:
 
----
+```env
+PORT=3001
+JWT_SECRET=your-secret-key
+STORE_NAME=Your Business Name
+STORE_ADDRESS=Your Business Address
+STORE_GSTIN=YOUR-GSTIN
+STORE_PHONE=YOUR-PHONE
+CURRENCY_SYMBOL=₹
+BUSINESS_TYPE=retail
+```
 
-## 🌟 Key Features
+## Tech Stack
 
-- ⚡ **Instant Barcode Scanning & Live Search**: Scan barcodes or type product names.
-- 🛒 **Dynamic Cart & Totals**: Auto-calculates Subtotal, GST, and Grand Total.
-- 👤 **Customer & Loyalty Engine**: Link customer phone numbers to earn loyalty points.
-- 🏷️ **Coupons & Discounts**: Apply percent or flat discount codes (`SAVE10`, `FLAT50`, `MEGA20`).
-- ⏸️ **Hold & Recall Bills**: Put customer orders on hold and resume them anytime.
-- 💳 **Multiple Payment Modes**: Cash (with change calculator), Card, UPI, and Split billing.
-- 🧾 **Printable Thermal Receipts**: Clean printable thermal receipt formatted for store printers.
-- 📊 **Standalone HTML Prototypes**: Single-file offline versions (`supermart_pos.html` & `supermart_admin.html`).
+- **Frontend:** React 18, React Router, Vite
+- **Backend:** Express.js, better-sqlite3
+- **Auth:** bcrypt + JWT
+- **Testing:** Jest + Supertest
 
----
+## Project Structure
 
-## 📁 Tech Stack
+```
+├── client/
+│   └── src/
+│       ├── components/Layout.jsx   # Sidebar navigation
+│       ├── pages/
+│       │   ├── Login.jsx           # Employee authentication
+│       │   ├── Dashboard.jsx       # Sales overview & alerts
+│       │   ├── Billing.jsx         # Main POS billing screen
+│       │   ├── Products.jsx        # Product CRUD & stock management
+│       │   ├── Customers.jsx       # Customer list & registration
+│       │   ├── Reports.jsx         # Sales reports & analytics
+│       │   └── Refunds.jsx         # Returns processing
+│       └── utils/api.js            # Shared auth fetch & helpers
+├── server/
+│   ├── index.js                    # Express app + route mounting
+│   ├── db.js                       # SQLite schema
+│   ├── seed.js                     # Sample data
+│   ├── routes/                     # API endpoints
+│   │   ├── auth.js, products.js, transactions.js,
+│   │   ├── payments.js, customers.js, refunds.js, reports.js
+│   ├── utils/auth.js               # bcrypt, JWT, middleware
+│   └── middleware/errorHandler.js   # Centralized error handling
+├── tests/billing.test.js           # 24 integration tests
+└── .env                            # Business configuration
+```
 
-- **Frontend**: Vite + React 18, Custom CSS Design System
-- **Backend**: Node.js, Express
-- **Database**: SQLite (via `better-sqlite3` in WAL mode)
+## Role-Based Access
+
+| Action | Cashier | Supervisor |
+|--------|---------|------------|
+| Billing & payments | ✅ | ✅ |
+| View products | ✅ | ✅ |
+| Create/edit/delete products | ❌ | ✅ |
+| Process refunds | ❌ | ✅ |
+| View reports | ❌ | ✅ |
+| Dashboard analytics | Basic | Full |
+
+## Scripts
+
+```bash
+npm run dev      # Start both servers (frontend + backend)
+npm run server   # Backend only
+npm run client   # Frontend only
+npm run seed     # Reset database with sample data
+npm test         # Run 24 integration tests
+npm run lint     # ESLint check
+```
+
+## License
+
+MIT

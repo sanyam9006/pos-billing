@@ -2,7 +2,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const SALT_ROUNDS = 10;
-const JWT_SECRET = process.env.JWT_SECRET || 'supermart-pos-secret-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || 'pos-secret-change-in-production';
 const JWT_EXPIRY = '24h';
 
 // ── PIN Hashing ──

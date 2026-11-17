@@ -105,6 +105,19 @@ router.get('/active/:cashierId', (req, res) => {
   res.json({ ...txn, items, customer, coupon });
 });
 
+// ── GET /api/transactions/bill/:billNumber — Lookup by bill number (for refunds) ──
+router.get('/bill/:billNumber', (req, res) => {
+  const txn = db.prepare('SELECT * FROM transactions WHERE bill_number = ?').get(req.params.billNumber);
+  if (!txn) return res.status(404).json({ error: 'Bill not found' });
+
+  const items = getItemsWithProducts(txn.id);
+  const customer = txn.customer_id
+    ? db.prepare('SELECT * FROM customers WHERE id = ?').get(txn.customer_id)
+    : null;
+
+  res.json({ ...txn, items, customer });
+});
+
 // ── GET /api/transactions/:id — Get transaction with items ──
 router.get('/:id', (req, res) => {
   const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
