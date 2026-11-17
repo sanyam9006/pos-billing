@@ -150,7 +150,21 @@ function ProcessRefundModal({ onClose, onDone, notify }) {
       })
       if (res.ok) {
         const data = await res.json()
-        notify(`Refund of ${formatPrice(data.refund_amount)} processed`)
+        if (method === 'store_credit') {
+          try {
+            await authFetch('/api/credit-notes', {
+              method: 'POST',
+              body: JSON.stringify({
+                customer_phone: txn.customer?.phone || '9999999999',
+                customer_name: txn.customer?.name || 'Customer',
+                original_bill_number: txn.bill_number,
+                amount: data.refund_amount,
+                reason: reason || 'Garment exchange / return credit note'
+              })
+            })
+          } catch (_) {}
+        }
+        notify(`Refund of ${formatPrice(data.refund_amount)} processed (Credit Note issued)`)
         onDone()
       } else {
         const data = await res.json()

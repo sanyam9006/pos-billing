@@ -1,6 +1,21 @@
 const db = require('./db');
 const { hashPin } = require('./utils/auth');
 
+// ── SAFETY GUARD: Prevent accidental data deletion in live store ──
+const isForce = process.argv.includes('--force') || process.env.FORCE_SEED === 'true';
+try {
+  const txnCount = db.prepare('SELECT COUNT(*) as count FROM transactions').get()?.count || 0;
+  const prodCount = db.prepare('SELECT COUNT(*) as count FROM products').get()?.count || 0;
+
+  if (!isForce && (txnCount > 0 || prodCount > 0)) {
+    console.error('\n🛑 SAFETY GUARD TRIGGERED:');
+    console.error(`   The database already contains ${prodCount} products and ${txnCount} sales transactions.`);
+    console.error('   To protect live store data, database wipe was prevented.');
+    console.error('   To reset demo data explicitly, run: npm run seed -- --force\n');
+    process.exit(0);
+  }
+} catch (_) {}
+
 // Clear existing data
 db.exec('DELETE FROM purchase_order_items');
 db.exec('DELETE FROM purchase_orders');

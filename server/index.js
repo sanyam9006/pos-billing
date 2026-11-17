@@ -44,12 +44,27 @@ app.use('/api/refunds', authMiddleware, require('./routes/refunds'));
 app.use('/api/reports', authMiddleware, require('./routes/reports'));
 app.use('/api/suppliers', authMiddleware, require('./routes/suppliers'));
 app.use('/api/purchase-orders', authMiddleware, require('./routes/purchaseOrders'));
+app.use('/api/custom-orders', authMiddleware, require('./routes/customOrders'));
+app.use('/api/credit-notes', authMiddleware, require('./routes/creditNotes'));
+
+// ── Database Backup (supervisor only) ──
+const { performBackup } = require('./utils/backup');
+const { requireRole } = require('./utils/auth');
+app.post('/api/backup', authMiddleware, requireRole('supervisor'), (req, res) => {
+  const backupFile = performBackup();
+  if (backupFile) {
+    res.json({ success: true, message: 'Database backup created successfully', file: backupFile });
+  } else {
+    res.status(500).json({ error: 'Failed to create database backup' });
+  }
+});
 
 // Centralized error handling (must be last)
 app.use(errorHandler);
 
 // Start server only when run directly (not when imported for tests)
 if (require.main === module) {
+  performBackup();
   app.listen(PORT, () => {
     console.log(`🚀 POS Server running on http://localhost:${PORT}`);
   });

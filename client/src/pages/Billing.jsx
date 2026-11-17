@@ -261,8 +261,20 @@ export default function Billing({ cashier, onLogout }) {
     } catch { notify('Failed to link customer', 'error') }
   }
 
-  const processPayment = async (method, tendered) => {
+  const processPayment = async (method, tendered, refNumber) => {
     try {
+      if (method === 'store_credit' && refNumber) {
+        try {
+          await authFetch('/api/credit-notes/redeem', {
+            method: 'POST',
+            body: JSON.stringify({
+              note_number: refNumber,
+              amount_to_use: txn.grand_total
+            })
+          })
+        } catch (_) {}
+      }
+
       const res = await authFetch(`${API}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,7 +283,7 @@ export default function Billing({ cashier, onLogout }) {
           method,
           amount: txn.grand_total,
           tendered: method === 'cash' ? parseFloat(tendered) : txn.grand_total,
-          reference_number: method !== 'cash' ? `REF${Date.now()}` : null
+          reference_number: refNumber || (method !== 'cash' ? `REF${Date.now()}` : null)
         })
       })
       const data = await res.json()
@@ -494,8 +506,8 @@ export default function Billing({ cashier, onLogout }) {
               <button className="pay-btn upi" disabled={items.length === 0} onClick={() => setShowPayment('upi')}>
                 <span className="icon">📱</span> UPI
               </button>
-              <button className="pay-btn split" disabled={items.length === 0} onClick={() => setShowPayment('split')}>
-                <span className="icon">✂️</span> Split
+              <button className="pay-btn split" disabled={items.length === 0} onClick={() => setShowPayment('store_credit')}>
+                <span className="icon">🎟️</span> Credit Note
               </button>
             </div>
           </div>
@@ -509,6 +521,7 @@ export default function Billing({ cashier, onLogout }) {
         <PaymentModal
           method={showPayment}
           total={txn?.grand_total || 0}
+          customerPhone={customer?.phone}
           onConfirm={processPayment}
           onClose={() => setShowPayment(null)}
         />
@@ -552,12 +565,41 @@ export default function Billing({ cashier, onLogout }) {
 /* ═══════════════════════════
    PAYMENT MODAL
    ═══════════════════════════ */
-function PaymentModal({ method, total, onConfirm, onClose }) {
+function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
   const [tendered, setTendered] = useState('')
-  const change = method === 'cash' ? Math.max(0, (parseFloat(tendered) || 0) - total) : 0
-  const canPay = method === 'cash' ? (parseFloat(tendered) || 0) >= total : true
+  const [cnPhone, setCnPhone] = useState(customerPhone || '')
+  const [creditNotes, setCreditNotes] = useState([])
+  const [selectedNote, setSelectedNote] = useState(null)
+  const [cnLoading, setCnLoading] = useState(false)
 
-  const methodLabels = { cash: '💵 Cash Payment', card: '💳 Card Payment', upi: '📱 UPI Payment', split: '✂️ Split Payment' }
+  const change = method === 'cash' ? Math.max(0, (parseFloat(tendered) || 0) - total) : 0
+  const canPay = method === 'cash'
+    ? (parseFloat(tendered) || 0) >= total
+    : method === 'store_credit'
+    ? !!selectedNote && selectedNote.balance_remaining > 0
+    : true
+
+  const methodLabels = {
+    cash: '💵 Cash Payment',
+    card: '💳 Card Payment',
+    upi: '📱 UPI Payment',
+    split: '✂️ Split Payment',
+    store_credit: '🎟️ Redeem Store Credit / Exchange Note'
+  }
+
+  const lookupCreditNotes = async () => {
+    if (!cnPhone.trim()) return
+    setCnLoading(true)
+    try {
+      const res = await authFetch(`/api/credit-notes/lookup?phone=${cnPhone.trim()}`)
+      if (res.ok) {
+        const data = await res.json()
+        setCreditNotes(data.notes || [])
+        if (data.notes?.length > 0) setSelectedNote(data.notes[0])
+      }
+    } catch {}
+    setCnLoading(false)
+  }
 
   if (method === 'split') {
     return <SplitPaymentModal total={total} onConfirm={onConfirm} onClose={onClose} />
@@ -566,7 +608,7 @@ function PaymentModal({ method, total, onConfirm, onClose }) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
-        <h2>{methodLabels[method]} <button className="modal-close" onClick={onClose}>✕</button></h2>
+        <h2>{methodLabels[method] || 'Payment'} <button className="modal-close" onClick={onClose}>✕</button></h2>
         <div className="payment-amount-display">
           <div className="label">Amount Due</div>
           <div className="amount">₹{total.toFixed(2)}</div>
@@ -594,6 +636,54 @@ function PaymentModal({ method, total, onConfirm, onClose }) {
           </>
         )}
 
+        {method === 'store_credit' && (
+          <div>
+            <label style={{ fontSize: '12px', fontWeight: 700 }}>Customer Phone Number</label>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <input
+                placeholder="Enter 10-digit phone"
+                value={cnPhone}
+                onChange={e => setCnPhone(e.target.value)}
+                style={{ flex: 1 }}
+              />
+              <button type="button" className="btn-primary btn-sm" onClick={lookupCreditNotes} disabled={cnLoading}>
+                🔍 Find Credit Notes
+              </button>
+            </div>
+
+            {creditNotes.length > 0 ? (
+              <div style={{ maxHeight: '160px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '6px' }}>
+                {creditNotes.map(n => (
+                  <div
+                    key={n.id}
+                    onClick={() => setSelectedNote(n)}
+                    style={{
+                      padding: '8px 10px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: selectedNote?.id === n.id ? 'var(--accent-tint)' : 'var(--bg-subtle)',
+                      cursor: 'pointer',
+                      marginBottom: '4px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontWeight: 700 }}>{n.note_number}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{n.reason || 'Store Credit'}</div>
+                    </div>
+                    <div style={{ fontWeight: 800, color: 'var(--success)' }}>₹{n.balance_remaining}</div>
+                  </div>
+                ))}
+              </div>
+            ) : cnPhone && (
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', padding: '12px' }}>
+                No active credit notes found for this phone
+              </div>
+            )}
+          </div>
+        )}
+
         {method === 'card' && (
           <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '20px' }}>
             💳 Please insert/tap card on the payment terminal...
@@ -612,7 +702,15 @@ function PaymentModal({ method, total, onConfirm, onClose }) {
           <button
             className="modal-btn primary"
             disabled={!canPay}
-            onClick={() => onConfirm(method, tendered)}
+            onClick={() => onConfirm(method, tendered, selectedNote?.note_number)}
+          >
+            {method === 'cash' ? 'Complete Cash Sale' : method === 'store_credit' ? `Redeem Note (₹${selectedNote?.balance_remaining || 0})` : 'Confirm Payment'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
           >
             ✅ Confirm Payment
           </button>
@@ -908,12 +1006,13 @@ function ReceiptModal({ data, onClose }) {
 
           <table className="items-table">
             <thead>
-              <tr><th>Item</th><th>Qty</th><th>Price</th><th className="right">Amt</th></tr>
+              <tr><th>Item</th><th>HSN</th><th>Qty</th><th>Price</th><th className="right">Amt</th></tr>
             </thead>
             <tbody>
               {data.items?.map((item, i) => (
                 <tr key={i}>
                   <td>{item.product_name}</td>
+                  <td><code>{item.hsn_code || '—'}</code></td>
                   <td>{item.quantity}</td>
                   <td>₹{item.unit_price?.toFixed(2)}</td>
                   <td className="right">₹{item.line_total?.toFixed(2)}</td>
@@ -927,9 +1026,32 @@ function ReceiptModal({ data, onClose }) {
             {data.discount > 0 && (
               <div className="row"><span>Discount{data.coupon ? ` (${data.coupon.code})` : ''}</span><span>-₹{data.discount?.toFixed(2)}</span></div>
             )}
-            <div className="row"><span>Tax (GST)</span><span>₹{data.tax?.toFixed(2)}</span></div>
+            <div className="row"><span>CGST (Central Tax)</span><span>₹{(data.cgst ?? (data.tax / 2))?.toFixed(2)}</span></div>
+            <div className="row"><span>SGST (State Tax)</span><span>₹{(data.sgst ?? (data.tax / 2))?.toFixed(2)}</span></div>
             <div className="row grand"><span>GRAND TOTAL</span><span>₹{data.grand_total?.toFixed(2)}</span></div>
           </div>
+
+          {data.tax_summary?.length > 0 && (
+            <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed #ccc', fontSize: '10px' }}>
+              <div style={{ fontWeight: 700, marginBottom: '4px' }}>GST Tax Summary:</div>
+              <table style={{ width: '100%', fontSize: '10px', textAlign: 'left' }}>
+                <thead>
+                  <tr><th>HSN</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>Tax</th></tr>
+                </thead>
+                <tbody>
+                  {data.tax_summary.map((ts, idx) => (
+                    <tr key={idx}>
+                      <td>{ts.hsn}</td>
+                      <td>₹{ts.taxable_value?.toFixed(2)}</td>
+                      <td>{ts.cgst_rate}%: ₹{ts.cgst_amount?.toFixed(2)}</td>
+                      <td>{ts.sgst_rate}%: ₹{ts.sgst_amount?.toFixed(2)}</td>
+                      <td>₹{ts.total_tax?.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div className="payment-info">
             {data.payments?.map((p, i) => (

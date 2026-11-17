@@ -158,6 +158,37 @@ db.exec(`
     FOREIGN KEY (product_id) REFERENCES products(id)
   );
 
+  CREATE TABLE IF NOT EXISTS custom_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT UNIQUE NOT NULL,
+    customer_name TEXT NOT NULL,
+    customer_phone TEXT NOT NULL,
+    service_type TEXT NOT NULL,
+    status TEXT DEFAULT 'booked' CHECK(status IN ('booked', 'in_progress', 'trial_ready', 'completed', 'delivered')),
+    trial_date DATE,
+    delivery_date DATE,
+    total_amount REAL NOT NULL,
+    advance_paid REAL DEFAULT 0,
+    balance_due REAL NOT NULL,
+    measurements_json TEXT,
+    design_notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    delivered_at DATETIME
+  );
+
+  CREATE TABLE IF NOT EXISTS credit_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_number TEXT UNIQUE NOT NULL,
+    customer_phone TEXT NOT NULL,
+    customer_name TEXT,
+    original_bill_number TEXT,
+    amount REAL NOT NULL,
+    balance_remaining REAL NOT NULL,
+    reason TEXT,
+    status TEXT DEFAULT 'active' CHECK(status IN ('active', 'redeemed', 'expired')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
   CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
   CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);

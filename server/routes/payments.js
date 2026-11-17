@@ -122,6 +122,41 @@ router.get('/receipt/:txnId', (req, res) => {
     ? db.prepare('SELECT code, type, value FROM coupons WHERE id = ?').get(txn.coupon_id)
     : null;
 
+  const cgst = Math.round((txn.tax_amount / 2) * 100) / 100;
+  const sgst = Math.round((txn.tax_amount - cgst) * 100) / 100;
+
+  // Build GST tax summary by HSN & rate
+  const taxSummaryMap = {};
+  for (const item of items) {
+    const key = `${item.hsn_code || 'GEN'}_${item.tax_rate}`;
+    if (!taxSummaryMap[key]) {
+      taxSummaryMap[key] = {
+        hsn: item.hsn_code || '—',
+        tax_rate: item.tax_rate,
+        taxable_value: 0,
+        cgst_rate: item.tax_rate / 2,
+        cgst_amount: 0,
+        sgst_rate: item.tax_rate / 2,
+        sgst_amount: 0,
+        total_tax: 0
+      };
+    }
+    const taxable = Math.round((item.line_total - item.tax) * 100) / 100;
+    const cgstItem = Math.round((item.tax / 2) * 100) / 100;
+    const sgstItem = Math.round((item.tax - cgstItem) * 100) / 100;
+    taxSummaryMap[key].taxable_value += taxable;
+    taxSummaryMap[key].cgst_amount += cgstItem;
+    taxSummaryMap[key].sgst_amount += sgstItem;
+    taxSummaryMap[key].total_tax += item.tax;
+  }
+  const tax_summary = Object.values(taxSummaryMap).map(ts => ({
+    ...ts,
+    taxable_value: Math.round(ts.taxable_value * 100) / 100,
+    cgst_amount: Math.round(ts.cgst_amount * 100) / 100,
+    sgst_amount: Math.round(ts.sgst_amount * 100) / 100,
+    total_tax: Math.round(ts.total_tax * 100) / 100
+  }));
+
   res.json({
     store: {
       name: process.env.STORE_NAME || 'SUPERMART RETAIL PVT LTD',
@@ -139,6 +174,9 @@ router.get('/receipt/:txnId', (req, res) => {
     discount: txn.total_discount,
     coupon,
     tax: txn.tax_amount,
+    cgst,
+    sgst,
+    tax_summary,
     grand_total: txn.grand_total,
     payments,
     loyalty_earned: customer ? Math.floor(txn.grand_total / 100) : 0

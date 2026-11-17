@@ -9,7 +9,8 @@ if [ -d "$HOME/.nvm/versions/node" ]; then
 fi
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-PROJECT_DIR="/Users/apple/.gemini/antigravity-ide/scratch/pos-billing"
+# Auto-detect project directory (works on any Mac, any user account)
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_DIR" || exit 1
 
 # Check if server is already running

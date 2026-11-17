@@ -26,6 +26,8 @@ describe('Procurement & Batch Matrix Variants', () => {
     cashierToken = cashRes.body.token;
 
     // Clean up test data
+    db.prepare("DELETE FROM purchase_order_items WHERE po_id IN (SELECT id FROM purchase_orders WHERE notes LIKE 'Test%')").run();
+    db.prepare("DELETE FROM purchase_orders WHERE notes LIKE 'Test%'").run();
     db.prepare("DELETE FROM products WHERE sku LIKE 'TEST-VAR-%'").run();
     db.prepare("DELETE FROM suppliers WHERE name LIKE 'Test Supplier%'").run();
   });

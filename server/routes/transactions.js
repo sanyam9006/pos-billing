@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
+const { calculateItemTaxAndTotal } = require('../utils/tax');
 
 // ── Helper: generate bill number (race-condition safe) ──
 // Uses a dedicated sequence table inside a SQLite transaction
@@ -23,11 +24,16 @@ const generateBillNumber = db.transaction(() => {
 
 // ── Helper: recalculate transaction totals ──
 function recalcTotals(txnId) {
+  const isInclusive = process.env.TAX_MODE === 'inclusive';
   const items = db.prepare('SELECT * FROM transaction_items WHERE txn_id = ?').all(txnId);
   let subtotal = 0;
   let totalTax = 0;
   items.forEach(item => {
-    subtotal += item.unit_price * item.quantity;
+    if (isInclusive) {
+      subtotal += item.line_total;
+    } else {
+      subtotal += item.unit_price * item.quantity;
+    }
     totalTax += item.tax;
   });
 
@@ -46,7 +52,9 @@ function recalcTotals(txnId) {
     }
   }
 
-  const grandTotal = Math.max(0, Math.round((subtotal - totalDiscount + totalTax) * 100) / 100);
+  const grandTotal = isInclusive
+    ? Math.max(0, Math.round((subtotal - totalDiscount) * 100) / 100)
+    : Math.max(0, Math.round((subtotal - totalDiscount + totalTax) * 100) / 100);
 
   db.prepare(
     'UPDATE transactions SET subtotal = ?, total_discount = ?, tax_amount = ?, grand_total = ? WHERE id = ?'
@@ -165,19 +173,17 @@ router.post('/:id/items', (req, res) => {
 
   if (existingItem) {
     const newQty = existingItem.quantity + quantity;
-    const tax = Math.round(product.selling_price * newQty * product.tax_rate / 100 * 100) / 100;
-    const lineTotal = Math.round((product.selling_price * newQty + tax) * 100) / 100;
+    const calc = calculateItemTaxAndTotal(product, newQty);
 
     db.prepare(
       'UPDATE transaction_items SET quantity = ?, tax = ?, line_total = ? WHERE id = ?'
-    ).run(newQty, tax, lineTotal, existingItem.id);
+    ).run(newQty, calc.tax, calc.lineTotal, existingItem.id);
   } else {
-    const tax = Math.round(product.selling_price * quantity * product.tax_rate / 100 * 100) / 100;
-    const lineTotal = Math.round((product.selling_price * quantity + tax) * 100) / 100;
+    const calc = calculateItemTaxAndTotal(product, quantity);
 
     db.prepare(
       'INSERT INTO transaction_items (txn_id, product_id, quantity, unit_price, tax, line_total) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(txnId, product_id, quantity, product.selling_price, tax, lineTotal);
+    ).run(txnId, product_id, quantity, product.selling_price, calc.tax, calc.lineTotal);
   }
 
   // Deduct stock
@@ -225,12 +231,11 @@ router.put('/:id/items/:itemId', (req, res) => {
     db.prepare('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?').run(oldQty, item.product_id);
   } else {
     const product = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
-    const tax = Math.round(product.selling_price * quantity * product.tax_rate / 100 * 100) / 100;
-    const lineTotal = Math.round((product.selling_price * quantity + tax) * 100) / 100;
+    const calc = calculateItemTaxAndTotal(product, quantity);
 
     db.prepare(
       'UPDATE transaction_items SET quantity = ?, tax = ?, line_total = ? WHERE id = ?'
-    ).run(quantity, tax, lineTotal, itemId);
+    ).run(quantity, calc.tax, calc.lineTotal, itemId);
 
     // Adjust stock by delta
     db.prepare('UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?').run(stockDelta, item.product_id);
