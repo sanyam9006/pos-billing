@@ -1,9 +1,30 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const db = require('../db');
 
 const SALT_ROUNDS = 10;
-const JWT_SECRET = process.env.JWT_SECRET || 'pos-secret-change-in-production';
 const JWT_EXPIRY = '24h';
+
+function getJwtSecret() {
+  if (process.env.NODE_ENV === 'production' && process.env.JWT_SECRET === 'pos-secret-change-in-production') {
+    throw new Error('FATAL: Default JWT_SECRET is not permitted in production. Set a secure JWT_SECRET in .env');
+  }
+  if (process.env.JWT_SECRET && process.env.JWT_SECRET !== 'pos-secret-change-in-production') {
+    return process.env.JWT_SECRET;
+  }
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'SYSTEM_JWT_SECRET'").get();
+    if (row && row.value) return row.value;
+    const generated = crypto.randomBytes(32).toString('hex');
+    db.prepare("INSERT OR REPLACE INTO settings (key, value, description) VALUES ('SYSTEM_JWT_SECRET', ?, 'Auto-generated secure system JWT secret')").run(generated);
+    return generated;
+  } catch (_) {
+    return 'development-temporary-jwt-secret-key-12345';
+  }
+}
+
+const JWT_SECRET = getJwtSecret();
 
 // ── PIN Hashing ──
 function hashPin(pin) {
