@@ -711,14 +711,6 @@ function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
     </div>
   )
 }
-          >
-            ✅ Confirm Payment
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /* ═══════════════════════════
    SPLIT PAYMENT MODAL

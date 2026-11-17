@@ -10,13 +10,17 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+const path = require('path');
+const fs = require('fs');
+
 // Public routes (no auth required)
 app.use('/api/auth', require('./routes/auth'));
 
-// Root redirect to frontend
-app.get('/', (req, res) => {
-  res.redirect('http://localhost:5173');
-});
+// Static client assets if built (for seamless single-port access on :3001)
+const clientDistPath = path.join(__dirname, '../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+}
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -57,6 +61,16 @@ app.post('/api/backup', authMiddleware, requireRole('supervisor'), (req, res) =>
   } else {
     res.status(500).json({ error: 'Failed to create database backup' });
   }
+});
+
+// SPA fallback: Serve frontend index.html if built, otherwise redirect to Vite dev server
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  const indexHtml = path.join(clientDistPath, 'index.html');
+  if (fs.existsSync(indexHtml)) {
+    return res.sendFile(indexHtml);
+  }
+  res.redirect('http://localhost:5173');
 });
 
 // Centralized error handling (must be last)
