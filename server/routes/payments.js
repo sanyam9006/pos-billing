@@ -28,10 +28,34 @@ function redeemStoreCredit(noteNumber, amount) {
 
 // ── POST /api/payments — Process single payment ──
 router.post('/', (req, res) => {
-  const { txn_id, method, amount, tendered, reference_number } = req.body;
+  const { txn_id, method, amount, tendered, reference_number, customer_name, customer_phone } = req.body;
 
   const txn = db.prepare("SELECT * FROM transactions WHERE id = ? AND status = 'active'").get(txn_id);
   if (!txn) return res.status(404).json({ error: 'Active transaction not found' });
+
+  // Quick link customer if provided at payment step
+  if (!txn.customer_id && ((customer_phone && String(customer_phone).trim()) || (customer_name && String(customer_name).trim()))) {
+    const cleanPhone = customer_phone ? String(customer_phone).trim() : '';
+    const cleanName = (customer_name && String(customer_name).trim()) ? String(customer_name).trim() : 'Customer';
+    if (cleanPhone) {
+      const customer = db.prepare('SELECT id, name FROM customers WHERE phone = ?').get(cleanPhone);
+      if (!customer) {
+        const cRes = db.prepare('INSERT INTO customers (name, phone, loyalty_points, membership_tier) VALUES (?, ?, 0, ?)').run(cleanName, cleanPhone, 'Silver');
+        db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(cRes.lastInsertRowid, txn_id);
+        txn.customer_id = cRes.lastInsertRowid;
+      } else {
+        if (cleanName && cleanName !== 'Customer' && customer.name !== cleanName) {
+          db.prepare('UPDATE customers SET name = ? WHERE id = ?').run(cleanName, customer.id);
+        }
+        db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(customer.id, txn_id);
+        txn.customer_id = customer.id;
+      }
+    } else if (cleanName && cleanName !== 'Customer') {
+      const cRes = db.prepare('INSERT INTO customers (name, phone, loyalty_points, membership_tier) VALUES (?, ?, 0, ?)').run(cleanName, '', 'Silver');
+      db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(cRes.lastInsertRowid, txn_id);
+      txn.customer_id = cRes.lastInsertRowid;
+    }
+  }
 
   // Calculate total already paid
   const paidSoFar = db.prepare('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE txn_id = ?').get(txn_id).total;
@@ -62,7 +86,8 @@ router.post('/', (req, res) => {
     const newPaidTotal = db.prepare('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE txn_id = ?').get(txn_id).total;
 
     if (newPaidTotal >= txn.grand_total - 0.05) {
-      db.prepare("UPDATE transactions SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(txn_id);
+      const completedAt = new Date().toISOString();
+      db.prepare("UPDATE transactions SET status = 'completed', completed_at = ? WHERE id = ?").run(completedAt, txn_id);
 
       // Loyalty points (1 point per ₹100)
       if (txn.customer_id) {
@@ -99,10 +124,34 @@ router.post('/', (req, res) => {
 
 // ── POST /api/payments/split — Process split payment ──
 router.post('/split', (req, res) => {
-  const { txn_id, payments: paymentsList } = req.body;
+  const { txn_id, payments: paymentsList, customer_name, customer_phone } = req.body;
 
   const txn = db.prepare("SELECT * FROM transactions WHERE id = ? AND status = 'active'").get(txn_id);
   if (!txn) return res.status(404).json({ error: 'Active transaction not found' });
+
+  // Quick link customer if provided at payment step
+  if (!txn.customer_id && ((customer_phone && String(customer_phone).trim()) || (customer_name && String(customer_name).trim()))) {
+    const cleanPhone = customer_phone ? String(customer_phone).trim() : '';
+    const cleanName = (customer_name && String(customer_name).trim()) ? String(customer_name).trim() : 'Customer';
+    if (cleanPhone) {
+      const customer = db.prepare('SELECT id, name FROM customers WHERE phone = ?').get(cleanPhone);
+      if (!customer) {
+        const cRes = db.prepare('INSERT INTO customers (name, phone, loyalty_points, membership_tier) VALUES (?, ?, 0, ?)').run(cleanName, cleanPhone, 'Silver');
+        db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(cRes.lastInsertRowid, txn_id);
+        txn.customer_id = cRes.lastInsertRowid;
+      } else {
+        if (cleanName && cleanName !== 'Customer' && customer.name !== cleanName) {
+          db.prepare('UPDATE customers SET name = ? WHERE id = ?').run(cleanName, customer.id);
+        }
+        db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(customer.id, txn_id);
+        txn.customer_id = customer.id;
+      }
+    } else if (cleanName && cleanName !== 'Customer') {
+      const cRes = db.prepare('INSERT INTO customers (name, phone, loyalty_points, membership_tier) VALUES (?, ?, 0, ?)').run(cleanName, '', 'Silver');
+      db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(cRes.lastInsertRowid, txn_id);
+      txn.customer_id = cRes.lastInsertRowid;
+    }
+  }
 
   const totalPaymentAmount = paymentsList.reduce((sum, p) => sum + Number(p.amount), 0);
   if (Math.abs(totalPaymentAmount - txn.grand_total) > 0.5) {
@@ -133,7 +182,8 @@ router.post('/split', (req, res) => {
       }
     }
 
-    db.prepare("UPDATE transactions SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(txn_id);
+    const completedAt = new Date().toISOString();
+    db.prepare("UPDATE transactions SET status = 'completed', completed_at = ? WHERE id = ?").run(completedAt, txn_id);
 
     if (txn.customer_id) {
       const pointsEarned = Math.floor(txn.grand_total / 100);
@@ -199,13 +249,19 @@ router.get('/receipt/:txnId', (req, res) => {
     thermal_width: getSetting('THERMAL_WIDTH', '80mm')
   };
 
+  let billDate = txn.completed_at || txn.created_at || new Date().toISOString();
+  const billDateStr = String(billDate).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(billDateStr)) {
+    billDate = billDateStr.replace(' ', 'T') + 'Z';
+  }
+
   res.json({
     bill_title: 'Bill',
     store: storeInfo,
     bill_number: txn.bill_number,
     transaction_type: txn.transaction_type || 'sale',
     exchange_for_bill: txn.exchange_for_bill || null,
-    date: txn.completed_at || txn.created_at,
+    date: billDate,
     counter: txn.counter_number,
     cashier,
     customer,

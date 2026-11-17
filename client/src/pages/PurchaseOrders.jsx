@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice } from '../utils/api'
+import { formatDate } from '../utils/date'
 
 export default function PurchaseOrders({ cashier }) {
   const [activeTab, setActiveTab] = useState('orders') // 'orders' | 'suppliers'
@@ -138,7 +139,7 @@ export default function PurchaseOrders({ cashier }) {
                   </td>
                   <td className="num">{formatPrice(po.total_cost)}</td>
                   <td>{po.total_units_ordered || 0} units ({po.item_count} items)</td>
-                  <td className="date-cell">{new Date(po.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                  <td className="date-cell">{formatDate(po.created_at)}</td>
                   <td>
                     <div className="action-cell">
                       <button className="icon-btn" title="View Details" onClick={() => handleViewPo(po.id)}>👁️</button>
@@ -210,7 +211,7 @@ export default function PurchaseOrders({ cashier }) {
                   {viewPo.status === 'received' ? '✅ Received & Restocked' : '🚚 In Transit'}
                 </span>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  {viewPo.received_at ? `Received: ${new Date(viewPo.received_at).toLocaleDateString('en-IN')}` : ''}
+                  {viewPo.received_at ? `Received: ${formatDate(viewPo.received_at)}` : ''}
                 </div>
               </div>
             </div>

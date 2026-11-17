@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { authFetch, API, formatPrice } from '../utils/api'
 import { STORE_LOGO_BASE64 } from '../utils/logo'
+import { formatDateTime, formatDate, formatTime } from '../utils/date'
 
 export default function Billing({ cashier, onLogout }) {
   const [txn, setTxn] = useState(null)
@@ -262,7 +263,7 @@ export default function Billing({ cashier, onLogout }) {
     } catch { notify('Failed to link customer', 'error') }
   }
 
-  const processPayment = async (method, tendered, refNumber) => {
+  const processPayment = async (method, tendered, refNumber, custInfo) => {
     try {
       if (method === 'store_credit' && refNumber) {
         try {
@@ -276,16 +277,27 @@ export default function Billing({ cashier, onLogout }) {
         } catch (_) {}
       }
 
+      const payload = {
+        txn_id: txn.id,
+        method,
+        amount: txn.grand_total,
+        tendered: method === 'cash' ? parseFloat(tendered) : txn.grand_total,
+        reference_number: refNumber || (method !== 'cash' ? `REF${Date.now()}` : null)
+      }
+
+      if (custInfo && !custInfo.skipped) {
+        if (custInfo.phone && custInfo.phone.trim()) {
+          payload.customer_phone = custInfo.phone.trim()
+        }
+        if (custInfo.name && custInfo.name.trim()) {
+          payload.customer_name = custInfo.name.trim()
+        }
+      }
+
       const res = await authFetch(`${API}/payments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          txn_id: txn.id,
-          method,
-          amount: txn.grand_total,
-          tendered: method === 'cash' ? parseFloat(tendered) : txn.grand_total,
-          reference_number: refNumber || (method !== 'cash' ? `REF${Date.now()}` : null)
-        })
+        body: JSON.stringify(payload)
       })
       const data = await res.json()
       if (!res.ok) {
@@ -300,14 +312,45 @@ export default function Billing({ cashier, onLogout }) {
     } catch { notify('Payment failed', 'error') }
   }
 
+  const processSplitPayment = async (paymentsList, custInfo) => {
+    try {
+      const payload = {
+        txn_id: txn.id,
+        payments: paymentsList
+      }
+      if (custInfo && !custInfo.skipped) {
+        if (custInfo.phone && custInfo.phone.trim()) {
+          payload.customer_phone = custInfo.phone.trim()
+        }
+        if (custInfo.name && custInfo.name.trim()) {
+          payload.customer_name = custInfo.name.trim()
+        }
+      }
+
+      const res = await authFetch(`${API}/payments/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        notify(data.error, 'error')
+        return
+      }
+      setShowPayment(null)
+      const receiptRes = await authFetch(`${API}/payments/receipt/${txn.id}`)
+      const receipt = await receiptRes.json()
+      setShowReceipt({ ...receipt, change: data.change })
+    } catch { notify('Split payment failed', 'error') }
+  }
+
   const closeReceipt = () => {
     setShowReceipt(null)
     createNewBill()
   }
 
-
-  const fmtTime = (d) => d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  const fmtDate = (d) => d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  const fmtTime = (d) => formatTime(d)
+  const fmtDate = (d) => formatDate(d)
 
   return (
     <div className="billing-screen">
@@ -518,8 +561,9 @@ export default function Billing({ cashier, onLogout }) {
         <PaymentModal
           method={showPayment}
           total={txn?.grand_total || 0}
-          customerPhone={customer?.phone}
+          customer={customer}
           onConfirm={processPayment}
+          onConfirmSplit={processSplitPayment}
           onClose={() => setShowPayment(null)}
         />
       )}
@@ -562,12 +606,19 @@ export default function Billing({ cashier, onLogout }) {
 /* ═══════════════════════════
    PAYMENT MODAL
    ═══════════════════════════ */
-function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
+function PaymentModal({ method, total, onConfirm, onConfirmSplit, onClose, customer }) {
   const [tendered, setTendered] = useState('')
-  const [cnPhone, setCnPhone] = useState(customerPhone || '')
+  const [cnPhone, setCnPhone] = useState(customer?.phone || '')
   const [creditNotes, setCreditNotes] = useState([])
   const [selectedNote, setSelectedNote] = useState(null)
   const [cnLoading, setCnLoading] = useState(false)
+
+  // Customer section states (Optional - can skip or fill both)
+  const [custPhone, setCustPhone] = useState(customer?.phone || '')
+  const [custName, setCustName] = useState(customer?.name || '')
+  const [isSkipped, setIsSkipped] = useState(false)
+  const [autoFound, setAutoFound] = useState(customer || null)
+  const [searchingCust, setSearchingCust] = useState(false)
 
   const change = method === 'cash' ? Math.max(0, (parseFloat(tendered) || 0) - total) : 0
   const canPay = method === 'cash'
@@ -584,6 +635,35 @@ function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
     store_credit: '🎟️ Redeem Store Credit / Exchange Note'
   }
 
+  const handlePhoneChange = async (val) => {
+    const cleaned = val.replace(/\D/g, '').slice(0, 10)
+    setCustPhone(cleaned)
+    if (cleaned.length === 10) {
+      setSearchingCust(true)
+      try {
+        const res = await authFetch(`${API}/customers/search?phone=${cleaned}`)
+        if (res.ok) {
+          const found = await res.json()
+          if (found && found.name) {
+            setAutoFound(found)
+            if (!custName.trim() || custName === 'Customer') {
+              setCustName(found.name)
+            }
+          } else {
+            setAutoFound(null)
+          }
+        } else {
+          setAutoFound(null)
+        }
+      } catch {
+        setAutoFound(null)
+      }
+      setSearchingCust(false)
+    } else {
+      setAutoFound(null)
+    }
+  }
+
   const lookupCreditNotes = async () => {
     if (!cnPhone.trim()) return
     setCnLoading(true)
@@ -598,8 +678,24 @@ function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
     setCnLoading(false)
   }
 
+  const handlePaymentSubmit = () => {
+    const custInfo = {
+      phone: isSkipped ? '' : custPhone.trim(),
+      name: isSkipped ? '' : custName.trim(),
+      skipped: isSkipped || (!custPhone.trim() && !custName.trim())
+    }
+    onConfirm(method, tendered, selectedNote?.note_number, custInfo)
+  }
+
   if (method === 'split') {
-    return <SplitPaymentModal total={total} onConfirm={onConfirm} onClose={onClose} />
+    return (
+      <SplitPaymentModal
+        total={total}
+        onConfirmSplit={onConfirmSplit}
+        onClose={onClose}
+        customer={customer}
+      />
+    )
   }
 
   return (
@@ -610,6 +706,77 @@ function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
           <div className="label">Amount Due</div>
           <div className="amount">₹{total.toFixed(2)}</div>
         </div>
+
+        {/* ── Customer Details Section (Optional - Skip or Fill Both) ── */}
+        {customer ? (
+          <div className="payment-customer-box linked">
+            <div className="cust-row">
+              <span>👤 Linked Customer: <strong>{customer.name}</strong> {customer.phone ? `(${customer.phone})` : ''}</span>
+              <span className="badge-linked">✓ Linked</span>
+            </div>
+          </div>
+        ) : isSkipped ? (
+          <div className="payment-customer-box skipped">
+            <div className="cust-row">
+              <span style={{ color: 'var(--text-muted)' }}>⏭️ Customer details skipped (Walk-in Customer)</span>
+              <button
+                type="button"
+                className="btn-link-action"
+                onClick={() => setIsSkipped(false)}
+              >
+                ✏️ Fill Details
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="payment-customer-box active">
+            <div className="cust-section-header">
+              <div className="cust-section-title">
+                <span>👤 Customer Details</span>
+                <span className="optional-pill">Optional</span>
+              </div>
+              <button
+                type="button"
+                className="btn-skip"
+                onClick={() => setIsSkipped(true)}
+                title="Skip customer details (proceed as Walk-in)"
+              >
+                ⏭️ Skip
+              </button>
+            </div>
+
+            <div className="cust-inputs-grid">
+              <div className="form-group-compact">
+                <label>Mobile Number</label>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  placeholder="10-digit mobile"
+                  value={custPhone}
+                  onChange={e => handlePhoneChange(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group-compact">
+                <label>Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="Customer name"
+                  value={custName}
+                  onChange={e => setCustName(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {searchingCust && <div className="cust-lookup-hint">🔍 Looking up customer...</div>}
+            {autoFound && !searchingCust && (
+              <div className="cust-found-hint">
+                ✨ Existing Customer: <strong>{autoFound.name}</strong> ({autoFound.membership_tier || 'Silver'} · {autoFound.loyalty_points || 0} pts)
+              </div>
+            )}
+          </div>
+        )}
 
         {method === 'cash' && (
           <>
@@ -699,7 +866,7 @@ function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
           <button
             className="modal-btn primary"
             disabled={!canPay}
-            onClick={() => onConfirm(method, tendered, selectedNote?.note_number)}
+            onClick={handlePaymentSubmit}
           >
             {method === 'cash' ? 'Complete Cash Sale' : method === 'store_credit' ? `Redeem Note (₹${selectedNote?.balance_remaining || 0})` : 'Confirm Payment'}
           </button>
@@ -712,9 +879,52 @@ function PaymentModal({ method, total, onConfirm, onClose, customerPhone }) {
 /* ═══════════════════════════
    SPLIT PAYMENT MODAL
    ═══════════════════════════ */
-function SplitPaymentModal({ total, onConfirm, onClose }) {
+function SplitPaymentModal({ total, onConfirmSplit, onClose, customer }) {
   const [cashAmt, setCashAmt] = useState('')
+  const [custPhone, setCustPhone] = useState(customer?.phone || '')
+  const [custName, setCustName] = useState(customer?.name || '')
+  const [isSkipped, setIsSkipped] = useState(false)
+  const [autoFound, setAutoFound] = useState(customer || null)
+  const [searchingCust, setSearchingCust] = useState(false)
+
   const remaining = total - (parseFloat(cashAmt) || 0)
+
+  const handlePhoneChange = async (val) => {
+    const cleaned = val.replace(/\D/g, '').slice(0, 10)
+    setCustPhone(cleaned)
+    if (cleaned.length === 10) {
+      setSearchingCust(true)
+      try {
+        const res = await authFetch(`${API}/customers/search?phone=${cleaned}`)
+        if (res.ok) {
+          const found = await res.json()
+          if (found && found.name) {
+            setAutoFound(found)
+            if (!custName.trim() || custName === 'Customer') {
+              setCustName(found.name)
+            }
+          }
+        }
+      } catch {}
+      setSearchingCust(false)
+    } else {
+      setAutoFound(null)
+    }
+  }
+
+  const handleSplitSubmit = async () => {
+    const cashPortion = parseFloat(cashAmt)
+    const cardPortion = Math.round((total - cashPortion) * 100) / 100
+    const custInfo = {
+      phone: isSkipped ? '' : custPhone.trim(),
+      name: isSkipped ? '' : custName.trim(),
+      skipped: isSkipped || (!custPhone.trim() && !custName.trim())
+    }
+    await onConfirmSplit([
+      { method: 'cash', amount: cashPortion, tendered: cashPortion },
+      { method: 'card', amount: cardPortion }
+    ], custInfo)
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -724,6 +934,77 @@ function SplitPaymentModal({ total, onConfirm, onClose }) {
           <div className="label">Total Amount</div>
           <div className="amount">₹{total.toFixed(2)}</div>
         </div>
+
+        {/* Customer Details Section (Optional) */}
+        {customer ? (
+          <div className="payment-customer-box linked">
+            <div className="cust-row">
+              <span>👤 Linked Customer: <strong>{customer.name}</strong> {customer.phone ? `(${customer.phone})` : ''}</span>
+              <span className="badge-linked">✓ Linked</span>
+            </div>
+          </div>
+        ) : isSkipped ? (
+          <div className="payment-customer-box skipped">
+            <div className="cust-row">
+              <span style={{ color: 'var(--text-muted)' }}>⏭️ Customer details skipped (Walk-in Customer)</span>
+              <button
+                type="button"
+                className="btn-link-action"
+                onClick={() => setIsSkipped(false)}
+              >
+                ✏️ Fill Details
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="payment-customer-box active">
+            <div className="cust-section-header">
+              <div className="cust-section-title">
+                <span>👤 Customer Details</span>
+                <span className="optional-pill">Optional</span>
+              </div>
+              <button
+                type="button"
+                className="btn-skip"
+                onClick={() => setIsSkipped(true)}
+                title="Skip customer details (proceed as Walk-in)"
+              >
+                ⏭️ Skip
+              </button>
+            </div>
+
+            <div className="cust-inputs-grid">
+              <div className="form-group-compact">
+                <label>Mobile Number</label>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  placeholder="10-digit mobile"
+                  value={custPhone}
+                  onChange={e => handlePhoneChange(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-group-compact">
+                <label>Customer Name</label>
+                <input
+                  type="text"
+                  placeholder="Customer name"
+                  value={custName}
+                  onChange={e => setCustName(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {searchingCust && <div className="cust-lookup-hint">🔍 Looking up customer...</div>}
+            {autoFound && !searchingCust && (
+              <div className="cust-found-hint">
+                ✨ Existing Customer: <strong>{autoFound.name}</strong> ({autoFound.membership_tier || 'Silver'} · {autoFound.loyalty_points || 0} pts)
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="form-group">
           <label>Cash Amount</label>
@@ -738,7 +1019,7 @@ function SplitPaymentModal({ total, onConfirm, onClose }) {
 
         <div style={{
           padding: '12px', background: 'var(--bg-card)', borderRadius: 'var(--radius)',
-          display: 'flex', justifyContent: 'space-between', fontSize: '14px'
+          display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '16px'
         }}>
           <span style={{ color: 'var(--text-secondary)' }}>Remaining (Card/UPI)</span>
           <span style={{ fontWeight: 700, fontFamily: 'JetBrains Mono', color: remaining > 0 ? 'var(--accent-light)' : 'var(--success)' }}>
@@ -751,12 +1032,7 @@ function SplitPaymentModal({ total, onConfirm, onClose }) {
           <button
             className="modal-btn primary"
             disabled={!cashAmt || parseFloat(cashAmt) <= 0 || parseFloat(cashAmt) >= total}
-            onClick={async () => {
-              const cashPortion = parseFloat(cashAmt)
-              const cardPortion = Math.round((total - cashPortion) * 100) / 100
-              // Process cash first
-              await onConfirm('cash', cashPortion.toString())
-            }}
+            onClick={handleSplitSubmit}
           >
             ✅ Process Split
           </button>
@@ -1009,11 +1285,7 @@ function ReceiptModal({ data, onClose }) {
     }, 250)
   }
 
-  const fmtDt = (s) => {
-    if (!s) return ''
-    const d = new Date(s)
-    return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-  }
+  const fmtDt = (s) => formatDateTime(s)
 
   return (
     <div className="modal-overlay">
@@ -1087,7 +1359,7 @@ function ReceiptModal({ data, onClose }) {
 
           {data.customer && (
             <div className="payment-info">
-              <div>Customer: {data.customer.name} ({data.customer.phone})</div>
+              <div>Customer: {data.customer.name}{data.customer.phone ? ` (${data.customer.phone})` : ''}</div>
               <div>Points Earned: {data.loyalty_earned} | Balance: {data.customer.loyalty_points}</div>
             </div>
           )}

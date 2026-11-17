@@ -1021,6 +1021,148 @@ body {
   color: var(--success);
 }
 
+/* Customer section in Payment Modal */
+.payment-customer-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.payment-customer-box.linked {
+  background: var(--success-bg, rgba(46, 125, 50, 0.08));
+  border-color: rgba(46, 125, 50, 0.3);
+}
+
+.payment-customer-box.skipped {
+  background: var(--bg-subtle, rgba(0, 0, 0, 0.03));
+  border-style: dashed;
+}
+
+.payment-customer-box .cust-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.cust-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.optional-pill {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  background: var(--bg-muted, rgba(120, 120, 120, 0.15));
+  color: var(--text-muted);
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.btn-skip {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--bg-subtle, #f1f3f5);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-skip:hover {
+  background: var(--border);
+  color: var(--text-primary);
+}
+
+.cust-inputs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.form-group-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group-compact label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.form-group-compact input {
+  padding: 8px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--input-bg, var(--bg));
+  color: var(--text-primary);
+  outline: none;
+  width: 100%;
+}
+
+.form-group-compact input:focus {
+  border-color: var(--accent);
+}
+
+.cust-found-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--success);
+  padding: 4px 8px;
+  background: var(--success-bg, rgba(46, 125, 50, 0.08));
+  border-radius: 4px;
+}
+
+.cust-lookup-hint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.cust-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.badge-linked {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--success);
+  background: rgba(46, 125, 50, 0.15);
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.btn-link-action {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.btn-link-action:hover {
+  text-decoration: underline;
+}
+
 /* Receipt modal */
 .receipt-modal {
   max-width: 440px;

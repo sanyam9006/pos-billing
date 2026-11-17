@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice } from '../utils/api'
+import { formatDateTime } from '../utils/date'
 
 export default function Refunds({ cashier }) {
   const [refunds, setRefunds] = useState([])
@@ -60,7 +61,7 @@ export default function Refunds({ cashier }) {
                 <td>{r.reason || '—'}</td>
                 <td><span className="method-badge">{r.refund_method?.toUpperCase()}</span></td>
                 <td className="num refund-amount">-{formatPrice(r.refund_amount)}</td>
-                <td className="date-cell">{new Date(r.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                <td className="date-cell">{formatDateTime(r.created_at)}</td>
                 <td>
                   {r.items?.map((item, i) => (
                     <div key={i} className="refund-item-tag">{item.product_name} ×{item.quantity}</div>
@@ -199,7 +200,7 @@ function ProcessRefundModal({ onClose, onDone, notify }) {
         {txn && (
           <>
             <div style={{ padding: '12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius)', margin: '12px 0', fontSize: '13px' }}>
-              <strong>{txn.bill_number}</strong> · {formatPrice(txn.grand_total)} · {new Date(txn.completed_at).toLocaleString('en-IN')}
+              <strong>{txn.bill_number}</strong> · {formatPrice(txn.grand_total)} · {formatDateTime(txn.completed_at)}
             </div>
 
             <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '8px' }}>Select items to refund:</p>

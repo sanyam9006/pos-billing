@@ -545,6 +545,42 @@ router.post('/:id/customer', (req, res) => {
   res.json({ ...sanitizeTxn(txn), customer });
 });
 
+// ── POST /api/transactions/:id/quick-customer — Add customer by name & mobile (or skip) ──
+router.post('/:id/quick-customer', (req, res) => {
+  const { name, phone, skip } = req.body;
+  const txn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(req.params.id);
+  if (!txn) return res.status(404).json({ error: 'Transaction not found' });
+
+  // If user skipped or left phone empty
+  if (skip || !phone || !String(phone).trim()) {
+    return res.json({ success: true, skipped: true, txn: sanitizeTxn(txn), customer: null });
+  }
+
+  const cleanPhone = String(phone).trim();
+  const cleanName = (name && String(name).trim()) ? String(name).trim() : 'Customer';
+
+  let customer = db.prepare('SELECT * FROM customers WHERE phone = ?').get(cleanPhone);
+  if (!customer) {
+    const result = db.prepare(
+      'INSERT INTO customers (name, phone, loyalty_points, membership_tier) VALUES (?, ?, 0, ?)'
+    ).run(cleanName, cleanPhone, 'Silver');
+    customer = db.prepare('SELECT * FROM customers WHERE id = ?').get(result.lastInsertRowid);
+  } else if (cleanName && cleanName !== 'Customer' && customer.name !== cleanName) {
+    db.prepare('UPDATE customers SET name = ? WHERE id = ?').run(cleanName, customer.id);
+    customer.name = cleanName;
+  }
+
+  db.prepare('UPDATE transactions SET customer_id = ? WHERE id = ?').run(customer.id, txn.id);
+  const updatedTxn = db.prepare('SELECT * FROM transactions WHERE id = ?').get(txn.id);
+
+  res.json({
+    success: true,
+    skipped: false,
+    txn: sanitizeTxn(updatedTxn),
+    customer
+  });
+});
+
 // ── DELETE /api/transactions/:id — Clear/void entire bill (restore all stock) ──
 router.delete('/:id', (req, res) => {
   const txnId = req.params.id;

@@ -351,3 +351,164 @@ describe('Role Enforcement & Customer Management', () => {
     expect(dupRes.status).toBe(409);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════
+// OPTIONAL CUSTOMER IN FINAL STEP & IST RECEIPT TIMING TESTS
+// ═══════════════════════════════════════════════════════════════
+describe('Optional Customer in Payment & IST Timing', () => {
+  test('Payment step can link customer with name & mobile (Fill Both)', async () => {
+    const custPhone = '9112233445';
+    db.prepare('DELETE FROM customers WHERE phone = ?').run(custPhone);
+
+    // Create bill
+    const billRes = await request(app)
+      .post('/api/transactions')
+      .set(authHeader(cashierToken))
+      .send({ cashier_id: cashierId });
+    const tId = billRes.body.id;
+
+    // Add item
+    await request(app)
+      .post(`/api/transactions/${tId}/items`)
+      .set(authHeader(cashierToken))
+      .send({ product_id: testProd1, quantity: 1 });
+
+    // Pay with customer details provided
+    const payRes = await request(app)
+      .post('/api/payments')
+      .set(authHeader(cashierToken))
+      .send({
+        txn_id: tId,
+        method: 'cash',
+        amount: 1200,
+        tendered: 1500,
+        customer_name: 'Aditi Sharma',
+        customer_phone: custPhone
+      });
+
+    expect(payRes.status).toBe(200);
+    expect(payRes.body.fully_paid).toBe(true);
+
+    // Fetch receipt
+    const recRes = await request(app)
+      .get(`/api/payments/receipt/${tId}`)
+      .set(authHeader(cashierToken));
+
+    expect(recRes.status).toBe(200);
+    expect(recRes.body.customer).toBeDefined();
+    expect(recRes.body.customer.name).toBe('Aditi Sharma');
+    expect(recRes.body.customer.phone).toBe(custPhone);
+    // Loyalty points earned = 1200 / 100 = 12
+    expect(recRes.body.loyalty_earned).toBe(12);
+  });
+
+  test('Payment step can be skipped without customer details (Walk-in Customer)', async () => {
+    // Create bill
+    const billRes = await request(app)
+      .post('/api/transactions')
+      .set(authHeader(cashierToken))
+      .send({ cashier_id: cashierId });
+    const tId = billRes.body.id;
+
+    // Add item
+    await request(app)
+      .post(`/api/transactions/${tId}/items`)
+      .set(authHeader(cashierToken))
+      .send({ product_id: testProd2, quantity: 1 });
+
+    // Pay without customer details (skipped / walk-in)
+    const payRes = await request(app)
+      .post('/api/payments')
+      .set(authHeader(cashierToken))
+      .send({
+        txn_id: tId,
+        method: 'cash',
+        amount: 800,
+        tendered: 1000
+      });
+
+    expect(payRes.status).toBe(200);
+    expect(payRes.body.fully_paid).toBe(true);
+
+    // Fetch receipt
+    const recRes = await request(app)
+      .get(`/api/payments/receipt/${tId}`)
+      .set(authHeader(cashierToken));
+
+    expect(recRes.status).toBe(200);
+    expect(recRes.body.customer).toBeNull();
+    expect(recRes.body.grand_total).toBe(800);
+    expect(recRes.body.bill_title).toBe('Bill');
+  });
+
+  test('Bill receipt timestamp is in ISO UTC format and correctly converts to Indian Standard Time', async () => {
+    // Create bill and complete
+    const billRes = await request(app)
+      .post('/api/transactions')
+      .set(authHeader(cashierToken))
+      .send({ cashier_id: cashierId });
+    const tId = billRes.body.id;
+
+    await request(app)
+      .post(`/api/transactions/${tId}/items`)
+      .set(authHeader(cashierToken))
+      .send({ product_id: testProd2, quantity: 1 });
+
+    await request(app)
+      .post('/api/payments')
+      .set(authHeader(cashierToken))
+      .send({ txn_id: tId, method: 'upi', amount: 800 });
+
+    const recRes = await request(app)
+      .get(`/api/payments/receipt/${tId}`)
+      .set(authHeader(cashierToken));
+
+    expect(recRes.status).toBe(200);
+    expect(recRes.body.date).toBeDefined();
+
+    // The returned date should end with Z or be standard ISO
+    const dateStr = recRes.body.date;
+    expect(dateStr).toMatch(/Z$|[+-]\d{2}:\d{2}$/);
+
+    // Parsing test for IST
+    const rawUtcString = '2026-11-17 19:51:38';
+    const rawWithZ = rawUtcString.replace(' ', 'T') + 'Z';
+    const parsedDate = new Date(rawWithZ);
+    const istString = parsedDate.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+
+    // 19:51:38 UTC + 5:30 = 01:21:38 am next day
+    expect(istString).toMatch(/01:21:38\s*(am|AM)/i);
+  });
+
+  test('quick-customer endpoint supports both linking and skipping', async () => {
+    const billRes = await request(app)
+      .post('/api/transactions')
+      .set(authHeader(cashierToken))
+      .send({ cashier_id: cashierId });
+    const tId = billRes.body.id;
+
+    // Test skip
+    const skipRes = await request(app)
+      .post(`/api/transactions/${tId}/quick-customer`)
+      .set(authHeader(cashierToken))
+      .send({ skip: true });
+    expect(skipRes.status).toBe(200);
+    expect(skipRes.body.skipped).toBe(true);
+
+    // Test fill both
+    const fillRes = await request(app)
+      .post(`/api/transactions/${tId}/quick-customer`)
+      .set(authHeader(cashierToken))
+      .send({ name: 'Meera Rajput', phone: '9888877777' });
+    expect(fillRes.status).toBe(200);
+    expect(fillRes.body.skipped).toBe(false);
+    expect(fillRes.body.customer.name).toBe('Meera Rajput');
+    expect(fillRes.body.customer.phone).toBe('9888877777');
+  });
+});

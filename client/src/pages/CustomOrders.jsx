@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice } from '../utils/api'
 import { STORE_LOGO_BASE64 } from '../utils/logo'
+import { formatDateTime, formatDate } from '../utils/date'
 
 export default function CustomOrders({ cashier }) {
   const [orders, setOrders] = useState([])
@@ -102,7 +103,7 @@ export default function CustomOrders({ cashier }) {
           <div style="font-size: 11px; color: #555;">4/8 Housing board Tonk Rajasthan · Tel: 7568458575</div>
           <div class="order-no" style="margin-top: 8px;">${order.order_number}</div>
           <div style="font-weight: 700; font-size: 14px;">Tailoring & Alteration Job Card</div>
-          <div style="font-size: 11px;">Date: ${new Date(order.created_at).toLocaleDateString('en-IN')}</div>
+          <div style="font-size: 11px;">Date: ${formatDateTime(order.created_at)}</div>
         </div>
 
         <div>

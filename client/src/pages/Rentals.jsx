@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { authFetch, formatPrice, getStoreConfig } from '../utils/api'
 import { BarcodeSvg } from '../utils/barcode'
 import { STORE_LOGO_BASE64 } from '../utils/logo'
+import { formatDateTime, formatDate } from '../utils/date'
 import ScanPromptModal from '../components/ScanPromptModal'
 
 export default function Rentals({ cashier }) {
@@ -1073,7 +1074,7 @@ function RentalSlipModal({ data, onClose }) {
 
         <div class="meta-sec">
           <div class="row"><span>Order:</span><span class="bold">${order.order_number}</span></div>
-          <div class="row"><span>Date:</span><span>${new Date(order.created_at).toLocaleDateString()}</span></div>
+          <div class="row"><span>Date:</span><span>${formatDateTime(order.created_at)}</span></div>
           <div class="row"><span>Customer:</span><span class="bold">${order.customer_name}</span></div>
           <div class="row"><span>Phone:</span><span>${order.customer_phone}</span></div>
           <div class="row"><span>Pickup Date:</span><span class="bold">${order.rent_date}</span></div>
