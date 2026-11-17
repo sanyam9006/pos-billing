@@ -173,7 +173,43 @@ insertCreditNote.run(
   new Date(Date.now() + 90 * 86400000).toISOString()
 );
 
-console.log('✅ Boutique database seeded successfully with Indian apparel catalog!');
+// ── Rental Items (Bridal & Occasion Wear) ──
+const insertRentalItem = db.prepare(`
+  INSERT INTO rental_items (
+    sku, barcode, name, category, size, color, deposit_amount,
+    pricing_mode_default, rent_per_day, event_rent, event_days, late_fee_per_day, status, notes
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+insertRentalItem.run(
+  'RNT-LEH-RED-M', '8908001001', 'Heritage Bridal Crimson Velvet Lehenga',
+  'Bridal Wear', 'M', 'Crimson Red', 10000,
+  'PER_EVENT', 1500, 4000, 3, 1000, 'available',
+  'Handcrafted zardozi & dabka work with double dupatta set'
+);
+
+insertRentalItem.run(
+  'RNT-LEH-PST-L', '8908001002', 'Pastel Floral Sequin Reception Lehenga',
+  'Reception & Sangeet', 'L', 'Blush Pink', 8000,
+  'PER_EVENT', 1200, 3000, 3, 800, 'available',
+  'Mirror & metallic sequin embroidery, lightweight cancan'
+);
+
+insertRentalItem.run(
+  'RNT-SRI-ORG-FREE', '8908001003', 'Organza Embroidered Designer Saree',
+  'Cocktail Sarees', 'Free', 'Sage Green', 4000,
+  'PER_DAY', 600, 1500, 3, 400, 'available',
+  'Scallop border with hand cut-dana work blouse'
+);
+
+insertRentalItem.run(
+  'RNT-SHW-IVR-40', '8908001004', 'Royal Ivory Zardosi Groom Sherwani Set',
+  'Groom & Menswear', '40', 'Ivory & Gold', 7000,
+  'PER_EVENT', 1000, 2500, 3, 700, 'available',
+  'Includes stole, safa, and churidar'
+);
+
+console.log('✅ Boutique database seeded successfully with Indian apparel catalog & rental items!');
 console.log('   • 15 Garment items & variants (Kurtis, Sarees, Co-ords, Dupattas)');
 console.log('   • Correct apparel HSNs (6204, 5208, 5407, 6214) with 5% & 18% slabs');
 console.log('   • 5 Customers, 3 Coupons, 2 Suppliers, 2 Tailoring Orders, 1 Credit Note');

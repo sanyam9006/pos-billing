@@ -208,6 +208,57 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  CREATE TABLE IF NOT EXISTS rental_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sku TEXT UNIQUE NOT NULL,
+    barcode TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT DEFAULT 'Bridal & Occasion Rental',
+    size TEXT,
+    color TEXT,
+    deposit_amount REAL DEFAULT 0,
+    pricing_mode_default TEXT DEFAULT 'PER_EVENT' CHECK(pricing_mode_default IN ('PER_DAY', 'PER_EVENT')),
+    rent_per_day REAL DEFAULT 0,
+    event_rent REAL DEFAULT 0,
+    event_days INTEGER DEFAULT 3,
+    late_fee_per_day REAL DEFAULT 0,
+    status TEXT DEFAULT 'available' CHECK(status IN ('available', 'rented', 'maintenance', 'retired')),
+    notes TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS rental_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_number TEXT UNIQUE NOT NULL,
+    rental_item_id INTEGER NOT NULL,
+    customer_name TEXT NOT NULL,
+    customer_phone TEXT NOT NULL,
+    customer_id INTEGER,
+    rent_date DATE NOT NULL,
+    due_date DATE NOT NULL,
+    pricing_mode TEXT NOT NULL CHECK(pricing_mode IN ('PER_DAY', 'PER_EVENT')),
+    applied_rate REAL NOT NULL,
+    billed_days INTEGER NOT NULL,
+    calculated_rent REAL NOT NULL,
+    final_rent REAL NOT NULL,
+    rent_override_reason TEXT,
+    rent_override_approved_by INTEGER,
+    deposit_amount REAL DEFAULT 0,
+    advance_paid REAL DEFAULT 0,
+    status TEXT DEFAULT 'active' CHECK(status IN ('booked', 'active', 'returned', 'cancelled')),
+    actual_return_date DATE,
+    extra_days INTEGER DEFAULT 0,
+    late_fee REAL DEFAULT 0,
+    early_refund REAL DEFAULT 0,
+    deposit_refunded REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    returned_at DATETIME,
+    FOREIGN KEY (rental_item_id) REFERENCES rental_items(id),
+    FOREIGN KEY (customer_id) REFERENCES customers(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
   CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
   CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
@@ -216,6 +267,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
   CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
   CREATE INDEX IF NOT EXISTS idx_po_items ON purchase_order_items(po_id);
+  CREATE INDEX IF NOT EXISTS idx_rental_items_barcode ON rental_items(barcode);
+  CREATE INDEX IF NOT EXISTS idx_rental_items_sku ON rental_items(sku);
+  CREATE INDEX IF NOT EXISTS idx_rental_orders_status ON rental_orders(status);
 `);
 
 // Safe migrations for optional columns
@@ -251,7 +305,10 @@ const defaultSettings = [
   ['BILL_PREFIX', 'AB-', 'Prefix for generated invoice/bill numbers (e.g. AB-20261117-0001)'],
   ['DISCOUNT_PIN_THRESHOLD', '500', 'Discounts exceeding this amount in Rupees require Supervisor/Owner PIN approval'],
   ['FOOTER_TEXT', 'Thank you for shopping at Aura Fashion Boutique! Exchange within 7 days with tag intact. No refund.', 'Receipt footer text'],
-  ['THERMAL_WIDTH', '80mm', 'Receipt print width format: 80mm, 58mm, or A4']
+  ['THERMAL_WIDTH', '80mm', 'Receipt print width format: 80mm, 58mm, or A4'],
+  ['RENTAL_COUNT_PICKUP_DAY', '1', 'Rental day calculation: 1 to count pickup day (e.g. Fri to Sun = 3 days), 0 for day difference only (2 days)'],
+  ['RENTAL_EARLY_RETURN_REFUND', '0', 'Early rental return: 1 for pro-rated refund (PER_DAY mode only), 0 for no automatic early refund'],
+  ['RENT_OVERRIDE_PIN_THRESHOLD', '500', 'Discounts or adjustments on rental price exceeding this amount require Supervisor PIN']
 ];
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value, description) VALUES (?, ?, ?)');

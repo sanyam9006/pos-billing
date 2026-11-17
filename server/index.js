@@ -54,6 +54,7 @@ app.use('/api/suppliers', authMiddleware, require('./routes/suppliers'));
 app.use('/api/purchase-orders', authMiddleware, require('./routes/purchaseOrders'));
 app.use('/api/custom-orders', authMiddleware, require('./routes/customOrders'));
 app.use('/api/credit-notes', authMiddleware, require('./routes/creditNotes'));
+app.use('/api/rentals', authMiddleware, require('./routes/rentals'));
 app.use('/api/settings', authMiddleware, require('./routes/settings'));
 
 // ── Database Backup (supervisor only) ──
