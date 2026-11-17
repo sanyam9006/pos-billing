@@ -2268,3 +2268,74 @@ body {
   .app-layout .sidebar { display: none !important; }
   .main-content { margin-left: 0 !important; }
 }
+
+
+/* ═══════════════════════════
+   MATRIX GENERATOR & PROCUREMENT STYLES
+   ═══════════════════════════ */
+
+.pill-btn {
+  padding: 6px 14px;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pill-btn:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.pill-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #FFFFFF;
+}
+
+.variant-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  text-transform: uppercase;
+}
+
+.variant-tag.size {
+  background: rgba(91, 155, 213, 0.18);
+  color: var(--accent-dark);
+}
+
+.variant-tag.color {
+  background: rgba(201, 162, 39, 0.18);
+  color: #8B6C10;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 14px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.status-pill.received {
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.status-pill.ordered {
+  background: rgba(91, 155, 213, 0.18);
+  color: var(--accent-dark);
+}
+
+.status-pill.draft {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}

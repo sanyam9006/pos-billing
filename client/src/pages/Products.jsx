@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
-import { authFetch, formatPrice } from '../utils/api'
+import { authFetch, formatPrice, getStoreConfig } from '../utils/api'
 
 export default function Products({ cashier }) {
   const [products, setProducts] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [showMatrixModal, setShowMatrixModal] = useState(false)
   const [editProduct, setEditProduct] = useState(null)
   const [showStockModal, setShowStockModal] = useState(null)
+  const [showTagModal, setShowTagModal] = useState(null)
   const [toast, setToast] = useState(null)
   const isSupervisor = cashier?.role === 'supervisor'
 
@@ -15,7 +17,7 @@ export default function Products({ cashier }) {
 
   const notify = (msg, type = 'success') => {
     setToast({ msg, type })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 3500)
   }
 
   const loadProducts = async () => {
@@ -49,7 +51,7 @@ export default function Products({ cashier }) {
         body: JSON.stringify({ adjustment: parseInt(adjustment) })
       })
       if (res.ok) {
-        notify('Stock updated')
+        notify('Stock updated successfully')
         setShowStockModal(null)
         loadProducts()
       } else {
@@ -65,13 +67,18 @@ export default function Products({ cashier }) {
 
       <div className="page-header">
         <div>
-          <h1>📦 Products</h1>
-          <p className="page-subtitle">{products.length} active products</p>
+          <h1>📦 Product Catalog & Inventory</h1>
+          <p className="page-subtitle">{products.length} active products & variants</p>
         </div>
         {isSupervisor && (
-          <button className="btn-primary" onClick={() => { setEditProduct(null); setShowForm(true) }}>
-            + Add Product
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button className="btn-primary" style={{ background: 'var(--accent-secondary)' }} onClick={() => setShowMatrixModal(true)}>
+              ⚡ Matrix Variant Generator
+            </button>
+            <button className="btn-primary" onClick={() => { setEditProduct(null); setShowForm(true) }}>
+              + Add Product
+            </button>
+          </div>
         )}
       </div>
 
@@ -81,7 +88,7 @@ export default function Products({ cashier }) {
         <input
           className="search-bar"
           type="text"
-          placeholder="Search by name, SKU, barcode, or category..."
+          placeholder="Search by name, SKU, barcode, category, or size..."
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -93,7 +100,7 @@ export default function Products({ cashier }) {
         <table className="data-table">
           <thead>
             <tr>
-              <th>Product</th>
+              <th>Product / Variant</th>
               <th>SKU</th>
               <th>Category</th>
               <th>MRP</th>
@@ -109,7 +116,11 @@ export default function Products({ cashier }) {
                 <td>
                   <div className="product-cell">
                     <div className="product-name-cell">{p.name}</div>
-                    <div className="product-barcode">{p.barcode}</div>
+                    <div className="product-barcode">
+                      {p.barcode}
+                      {p.variant_size && <span className="variant-tag size">{p.variant_size}</span>}
+                      {p.variant_color && <span className="variant-tag color">{p.variant_color}</span>}
+                    </div>
                   </div>
                 </td>
                 <td><code className="sku-code">{p.sku}</code></td>
@@ -125,6 +136,7 @@ export default function Products({ cashier }) {
                 {isSupervisor && (
                   <td>
                     <div className="action-cell">
+                      <button className="icon-btn" title="Print Barcode Tag" onClick={() => setShowTagModal(p)}>🏷️</button>
                       <button className="icon-btn" title="Edit" onClick={() => { setEditProduct(p); setShowForm(true) }}>✏️</button>
                       <button className="icon-btn" title="Adjust Stock" onClick={() => setShowStockModal(p)}>📦</button>
                       <button className="icon-btn danger" title="Deactivate" onClick={() => handleDelete(p)}>🗑️</button>
@@ -136,9 +148,26 @@ export default function Products({ cashier }) {
           </tbody>
         </table>
         {filtered.length === 0 && (
-          <div className="empty-table">No products found</div>
+          <div className="empty-table">{loading ? 'Loading catalog...' : 'No products found'}</div>
         )}
       </div>
+
+      {/* Matrix / Variant Generator Modal */}
+      {showMatrixModal && (
+        <MatrixGeneratorModal
+          onSuccess={() => { setShowMatrixModal(false); loadProducts() }}
+          onClose={() => setShowMatrixModal(false)}
+          notify={notify}
+        />
+      )}
+
+      {/* Barcode Tag Modal */}
+      {showTagModal && (
+        <BarcodeTagModal
+          product={showTagModal}
+          onClose={() => setShowTagModal(null)}
+        />
+      )}
 
       {/* Product Form Modal */}
       {showForm && (
@@ -162,6 +191,357 @@ export default function Products({ cashier }) {
   )
 }
 
+// ═══════════════════════════════════════════════
+// AUTOMATED MATRIX VARIANT GENERATOR (Size × Color)
+// ═══════════════════════════════════════════════
+function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
+  const [baseName, setBaseName] = useState('')
+  const [baseSku, setBaseSku] = useState('')
+  const [barcodePrefix, setBarcodePrefix] = useState(String(Math.floor(100000 + Math.random() * 900000)))
+  const [category, setCategory] = useState('')
+  const [mrp, setMrp] = useState('')
+  const [sellingPrice, setSellingPrice] = useState('')
+  const [costPrice, setCostPrice] = useState('')
+  const [hsnCode, setHsnCode] = useState('6204')
+  const [taxRate, setTaxRate] = useState(5)
+  const [stockPerVariant, setStockPerVariant] = useState(10)
+
+  // Quick preset selections
+  const COMMON_SIZES = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL']
+  const COMMON_COLORS = ['Black', 'White', 'Navy Blue', 'Red', 'Pink', 'Green', 'Yellow', 'Beige']
+
+  const [selectedSizes, setSelectedSizes] = useState(['S', 'M', 'L', 'XL'])
+  const [selectedColors, setSelectedColors] = useState(['Black', 'Navy Blue', 'Maroon'])
+  const [customSize, setCustomSize] = useState('')
+  const [customColor, setCustomColor] = useState('')
+  const [generating, setGenerating] = useState(false)
+
+  const toggleSize = (size) => {
+    setSelectedSizes(prev => prev.includes(size) ? prev.filter(s => s !== size) : [...prev, size])
+  }
+
+  const toggleColor = (color) => {
+    setSelectedColors(prev => prev.includes(color) ? prev.filter(c => c !== color) : [...prev, color])
+  }
+
+  const addCustomSize = () => {
+    if (customSize.trim() && !selectedSizes.includes(customSize.trim())) {
+      setSelectedSizes(prev => [...prev, customSize.trim().toUpperCase()])
+      setCustomSize('')
+    }
+  }
+
+  const addCustomColor = () => {
+    if (customColor.trim() && !selectedColors.includes(customColor.trim())) {
+      setSelectedColors(prev => [...prev, customColor.trim()])
+      setCustomColor('')
+    }
+  }
+
+  // Calculate combinations
+  const variants = []
+  let seq = 1
+  for (const color of selectedColors) {
+    for (const size of selectedSizes) {
+      const colorCode = color.slice(0, 3).toUpperCase()
+      const sku = `${baseSku ? baseSku.trim().toUpperCase() : 'SKU'}-${colorCode}-${size}`
+      const barcode = `${barcodePrefix}${String(seq).padStart(3, '0')}`
+      const name = `${baseName ? baseName.trim() : 'Product'} (${color} - ${size})`
+      variants.push({
+        sku,
+        barcode,
+        name,
+        category: category || 'Apparel',
+        mrp: parseFloat(mrp) || 0,
+        selling_price: parseFloat(sellingPrice) || 0,
+        cost_price: parseFloat(costPrice) || 0,
+        tax_rate: parseFloat(taxRate) || 5,
+        stock_qty: parseInt(stockPerVariant) || 0,
+        unit: 'pcs',
+        hsn_code: hsnCode,
+        variant_size: size,
+        variant_color: color
+      })
+      seq++
+    }
+  }
+
+  const handleGenerate = async () => {
+    if (!baseName || !baseSku || !mrp || !sellingPrice) {
+      notify('Please fill base product name, SKU code, MRP, and selling price', 'error')
+      return
+    }
+    if (variants.length === 0) {
+      notify('Select at least one size and one color', 'error')
+      return
+    }
+
+    setGenerating(true)
+    try {
+      const res = await authFetch('/api/products/batch', {
+        method: 'POST',
+        body: JSON.stringify({ products: variants })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        notify(`🎉 Created ${variants.length} product variants successfully!`)
+        onSuccess()
+      } else {
+        notify(data.error || 'Failed to create variants', 'error')
+      }
+    } catch {
+      notify('Server error creating variants', 'error')
+    }
+    setGenerating(false)
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal wide-modal matrix-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '850px', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h2>⚡ Automated Batch / Matrix Variant Generator <button className="modal-close" onClick={onClose}>✕</button></h2>
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
+          Auto-generate full size & color variant matrices (e.g., S/M/L/XL across 4 colors = 16 individual SKUs with barcodes) in 1 click!
+        </p>
+
+        <div className="form-row">
+          <div className="form-group" style={{ flex: 2 }}>
+            <label>Base Product Name *</label>
+            <input placeholder="e.g. Linen Embroidered Kurti" value={baseName} onChange={e => setBaseName(e.target.value)} autoFocus />
+          </div>
+          <div className="form-group" style={{ flex: 1 }}>
+            <label>Base SKU Prefix *</label>
+            <input placeholder="e.g. LEK" value={baseSku} onChange={e => setBaseSku(e.target.value.toUpperCase())} />
+          </div>
+          <div className="form-group" style={{ flex: 1 }}>
+            <label>Barcode Prefix</label>
+            <input placeholder="e.g. 890123" value={barcodePrefix} onChange={e => setBarcodePrefix(e.target.value)} />
+          </div>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group"><label>Category *</label><input placeholder="e.g. Women Ethnic" value={category} onChange={e => setCategory(e.target.value)} /></div>
+          <div className="form-group"><label>MRP *</label><input type="number" placeholder="1999" value={mrp} onChange={e => setMrp(e.target.value)} /></div>
+          <div className="form-group"><label>Selling Price *</label><input type="number" placeholder="1499" value={sellingPrice} onChange={e => setSellingPrice(e.target.value)} /></div>
+          <div className="form-group"><label>Cost Price</label><input type="number" placeholder="600" value={costPrice} onChange={e => setCostPrice(e.target.value)} /></div>
+          <div className="form-group"><label>Tax Rate %</label><input type="number" value={taxRate} onChange={e => setTaxRate(e.target.value)} /></div>
+        </div>
+
+        {/* Sizes Attribute Matrix */}
+        <div style={{ margin: '14px 0', padding: '12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius)' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>
+            Select Sizes ({selectedSizes.length} selected):
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+            {COMMON_SIZES.map(s => (
+              <button
+                type="button"
+                key={s}
+                className={`pill-btn ${selectedSizes.includes(s) ? 'active' : ''}`}
+                onClick={() => toggleSize(s)}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              placeholder="Add custom size (e.g. 32, Free Size)..."
+              value={customSize}
+              onChange={e => setCustomSize(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: '12px', flex: 1 }}
+            />
+            <button type="button" className="btn-primary btn-sm" onClick={addCustomSize}>+ Add Size</button>
+          </div>
+        </div>
+
+        {/* Colors Attribute Matrix */}
+        <div style={{ margin: '14px 0', padding: '12px', background: 'var(--bg-subtle)', borderRadius: 'var(--radius)' }}>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 700, textTransform: 'uppercase', marginBottom: '8px' }}>
+            Select Colors ({selectedColors.length} selected):
+          </label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+            {COMMON_COLORS.map(c => (
+              <button
+                type="button"
+                key={c}
+                className={`pill-btn ${selectedColors.includes(c) ? 'active' : ''}`}
+                onClick={() => toggleColor(c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              placeholder="Add custom color (e.g. Royal Blue, Peach)..."
+              value={customColor}
+              onChange={e => setCustomColor(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: '12px', flex: 1 }}
+            />
+            <button type="button" className="btn-primary btn-sm" onClick={addCustomColor}>+ Add Color</button>
+          </div>
+        </div>
+
+        <div className="form-group" style={{ width: '220px' }}>
+          <label>Default Stock Per Variant</label>
+          <input type="number" value={stockPerVariant} onChange={e => setStockPerVariant(e.target.value)} />
+        </div>
+
+        {/* Live Matrix Preview */}
+        {variants.length > 0 && (
+          <div style={{ marginTop: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <strong>Matrix Preview ({variants.length} variants will be created):</strong>
+            </div>
+            <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius)' }}>
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Variant Name</th>
+                    <th>Generated SKU</th>
+                    <th>Barcode</th>
+                    <th>Color</th>
+                    <th>Size</th>
+                    <th>Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {variants.map((v, i) => (
+                    <tr key={i}>
+                      <td><strong>{v.name}</strong></td>
+                      <td><code>{v.sku}</code></td>
+                      <td><code>{v.barcode}</code></td>
+                      <td>{v.variant_color}</td>
+                      <td><span className="variant-tag size">{v.variant_size}</span></td>
+                      <td className="num">{v.stock_qty}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: '20px' }}>
+          <button type="button" className="modal-btn secondary" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="modal-btn primary"
+            disabled={generating || variants.length === 0}
+            onClick={handleGenerate}
+          >
+            {generating ? '⏳ Generating Variants...' : `🚀 Generate & Save All ${variants.length} Variants`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════
+// CLOTHING / RETAIL BARCODE PRICE TAG MODAL
+// ═══════════════════════════════════════════════
+function BarcodeTagModal({ product, onClose }) {
+  const [store, setStore] = useState(null)
+  useEffect(() => {
+    getStoreConfig().then(setStore)
+  }, [])
+
+  const printTag = () => {
+    const printWindow = window.open('', '_blank', 'width=450,height=600')
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Barcode Tag - ${product.sku}</title>
+        <style>
+          body { font-family: -apple-system, sans-serif; text-align: center; margin: 0; padding: 20px; }
+          .tag {
+            width: 260px;
+            border: 2px dashed #333;
+            border-radius: 8px;
+            padding: 16px;
+            margin: auto;
+            text-align: center;
+          }
+          .store-name { font-size: 14px; font-weight: 800; letter-spacing: 0.5px; margin-bottom: 4px; }
+          .item-name { font-size: 13px; font-weight: 700; margin: 6px 0; }
+          .barcode-bars {
+            font-family: 'Courier New', monospace;
+            font-size: 26px;
+            letter-spacing: 3px;
+            margin: 8px 0 2px;
+            display: inline-block;
+            background: #eee;
+            padding: 4px 8px;
+            border-radius: 4px;
+          }
+          .digits { font-family: monospace; font-size: 12px; margin-bottom: 8px; }
+          .meta-row { display: flex; justify-content: space-around; font-size: 12px; margin: 6px 0; border-top: 1px solid #ddd; padding-top: 6px; }
+          .price-row { margin-top: 8px; }
+          .mrp { text-decoration: line-through; color: #777; font-size: 12px; margin-right: 6px; }
+          .sale-price { font-size: 18px; font-weight: 800; color: #111; }
+          @media print {
+            button { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="tag">
+          <div class="store-name">${store?.store_name || 'STORE'}</div>
+          <div class="item-name">${product.name}</div>
+          <div class="barcode-bars">|||||||||||||||||||</div>
+          <div class="digits">${product.barcode}</div>
+          <div class="meta-row">
+            <span>SKU: <strong>${product.sku}</strong></span>
+            ${product.variant_size ? `<span>Size: <strong>${product.variant_size}</strong></span>` : ''}
+          </div>
+          <div class="price-row">
+            <span class="mrp">MRP ₹${product.mrp}</span>
+            <span class="sale-price">₹${product.selling_price}</span>
+          </div>
+          <div style="font-size: 10px; color: #777; margin-top: 4px;">(Incl. of all taxes)</div>
+        </div>
+        <script>
+          window.onload = function() { window.print(); }
+        </script>
+      </body>
+      </html>
+    `
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <h2>🏷️ Barcode Price Tag <button className="modal-close" onClick={onClose}>✕</button></h2>
+        <div style={{ textAlign: 'center', padding: '16px', border: '1.5px dashed var(--border)', borderRadius: 'var(--radius)', background: 'var(--surface)', margin: '14px 0' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800 }}>{store?.store_name || 'STORE'}</div>
+          <div style={{ fontSize: '14px', fontWeight: 700, margin: '6px 0' }}>{product.name}</div>
+          <div style={{ fontSize: '26px', letterSpacing: '4px', fontFamily: 'monospace', margin: '8px 0', background: 'var(--bg-subtle)', padding: '6px', borderRadius: '4px' }}>
+            |||||||||||||||||||
+          </div>
+          <div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--text-muted)' }}>{product.barcode}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '16px', fontSize: '12px', marginTop: '8px' }}>
+            <span>SKU: <strong>{product.sku}</strong></span>
+            {product.variant_size && <span>Size: <strong>{product.variant_size}</strong></span>}
+          </div>
+          <div style={{ marginTop: '10px' }}>
+            <span style={{ textDecoration: 'line-through', color: 'var(--text-muted)', marginRight: '8px' }}>{formatPrice(product.mrp)}</span>
+            <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--accent-secondary)' }}>{formatPrice(product.selling_price)}</span>
+          </div>
+        </div>
+
+        <div className="modal-actions">
+          <button className="modal-btn secondary" onClick={onClose}>Close</button>
+          <button className="modal-btn primary" onClick={printTag}>🖨️ Print Label / Sticker</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ProductFormModal({ product, onSave, onClose, notify }) {
   const isEdit = !!product
   const [form, setForm] = useState({
@@ -171,7 +551,7 @@ function ProductFormModal({ product, onSave, onClose, notify }) {
     category: product?.category || '',
     mrp: product?.mrp || '',
     selling_price: product?.selling_price || '',
-    hsn_code: product?.hsn_code || '',
+    hsn_code: product?.hsn_code || '6204',
     tax_rate: product?.tax_rate ?? 5,
     stock_qty: product?.stock_qty ?? 0,
     unit: product?.unit || 'pcs'

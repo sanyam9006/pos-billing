@@ -42,6 +42,8 @@ app.use('/api/payments', authMiddleware, require('./routes/payments'));
 app.use('/api/customers', authMiddleware, require('./routes/customers'));
 app.use('/api/refunds', authMiddleware, require('./routes/refunds'));
 app.use('/api/reports', authMiddleware, require('./routes/reports'));
+app.use('/api/suppliers', authMiddleware, require('./routes/suppliers'));
+app.use('/api/purchase-orders', authMiddleware, require('./routes/purchaseOrders'));
 
 // Centralized error handling (must be last)
 app.use(errorHandler);

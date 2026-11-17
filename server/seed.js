@@ -2,6 +2,9 @@ const db = require('./db');
 const { hashPin } = require('./utils/auth');
 
 // Clear existing data
+db.exec('DELETE FROM purchase_order_items');
+db.exec('DELETE FROM purchase_orders');
+db.exec('DELETE FROM suppliers');
 db.exec('DELETE FROM payments');
 db.exec('DELETE FROM transaction_items');
 db.exec('DELETE FROM transactions');
@@ -104,6 +107,12 @@ insertProduct.run('BBY003', '8901030793472', 'Cerelac Wheat 300g', 'Baby Care', 
 // Stationery/General
 insertProduct.run('STN001', '8901030793480', 'Classmate Notebook 200pg', 'Stationery', 65, 60, '4820', 12, 100, 'pcs');
 insertProduct.run('STN002', '8901030793481', 'Reynolds Pen Pack of 5', 'Stationery', 50, 45, '9608', 18, 80, 'pcs');
+
+// ── Suppliers ──
+const insertSupplier = db.prepare('INSERT INTO suppliers (name, contact_person, phone, email, gstin, address) VALUES (?, ?, ?, ?, ?, ?)');
+insertSupplier.run('Apex Textiles & Apparels', 'Rajesh Mehta', '9820112233', 'apex@textiles.com', '27AABCA1122B1Z3', 'Plot 45, MIDC, Surat');
+insertSupplier.run('Vogue Trends Wholesalers', 'Deepa Shah', '9833445566', 'vogue@trends.in', '27AABCV3344C1Z9', 'Gandhi Nagar, Delhi');
+insertSupplier.run('Metro Retail Distributors', 'Suresh Reddy', '9844556677', 'metro@distributors.com', '29AABCM5566D1Z5', 'Peenya Industrial Area, Bengaluru');
 
 console.log('✅ Database seeded successfully!');
 console.log('   - 3 Cashiers');

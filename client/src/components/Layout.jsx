@@ -54,6 +54,10 @@ export default function Layout({ cashier, onLogout }) {
                 <span className="nav-icon">↩️</span>
                 <span>Refunds</span>
               </NavLink>
+              <NavLink to="/purchase-orders" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                <span className="nav-icon">🚚</span>
+                <span>Procurement</span>
+              </NavLink>
             </>
           )}
         </div>

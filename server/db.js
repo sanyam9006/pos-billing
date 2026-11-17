@@ -122,12 +122,61 @@ db.exec(`
     FOREIGN KEY (cashier_id) REFERENCES cashiers(id)
   );
 
+  CREATE TABLE IF NOT EXISTS suppliers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    contact_person TEXT,
+    phone TEXT,
+    email TEXT,
+    gstin TEXT,
+    address TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS purchase_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    po_number TEXT UNIQUE NOT NULL,
+    supplier_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'draft' CHECK(status IN ('draft', 'ordered', 'received', 'cancelled')),
+    total_cost REAL DEFAULT 0,
+    notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    received_at DATETIME,
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS purchase_order_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    po_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    quantity_ordered INTEGER NOT NULL,
+    quantity_received INTEGER DEFAULT 0,
+    cost_price REAL NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (po_id) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)
+  );
+
   CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
   CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
   CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
   CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
   CREATE INDEX IF NOT EXISTS idx_transactions_bill ON transactions(bill_number);
   CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+  CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status);
+  CREATE INDEX IF NOT EXISTS idx_po_items ON purchase_order_items(po_id);
 `);
+
+// Safe migrations for optional columns
+try {
+  db.exec("ALTER TABLE products ADD COLUMN variant_size TEXT");
+} catch (_) {}
+try {
+  db.exec("ALTER TABLE products ADD COLUMN variant_color TEXT");
+} catch (_) {}
+try {
+  db.exec("ALTER TABLE products ADD COLUMN cost_price REAL DEFAULT 0");
+} catch (_) {}
 
 module.exports = db;

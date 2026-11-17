@@ -40,6 +40,69 @@ router.get('/', (req, res) => {
   res.json(products);
 });
 
+// ── POST /api/products/batch — Bulk create products / matrix variants (supervisor only) ──
+router.post('/batch', requireRole('supervisor'), (req, res) => {
+  const { products } = req.body;
+  if (!Array.isArray(products) || products.length === 0) {
+    return res.status(400).json({ error: 'Expected an array of products' });
+  }
+
+  const checkSku = db.prepare('SELECT id FROM products WHERE sku = ?');
+  const checkBarcode = db.prepare('SELECT id FROM products WHERE barcode = ?');
+
+  const seenSkus = new Set();
+  const seenBarcodes = new Set();
+
+  for (const p of products) {
+    if (!p.sku || !p.barcode || !p.name || !p.category || p.mrp === undefined || p.mrp === null || p.selling_price === undefined || p.selling_price === null) {
+      return res.status(400).json({ error: `Missing required fields in item: ${p.sku || 'unnamed'}` });
+    }
+    if (seenSkus.has(p.sku) || checkSku.get(p.sku)) {
+      return res.status(409).json({ error: `Duplicate SKU: ${p.sku}` });
+    }
+    if (seenBarcodes.has(p.barcode) || checkBarcode.get(p.barcode)) {
+      return res.status(409).json({ error: `Duplicate Barcode: ${p.barcode}` });
+    }
+    seenSkus.add(p.sku);
+    seenBarcodes.add(p.barcode);
+  }
+
+  const insertProduct = db.prepare(`
+    INSERT INTO products (sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate, stock_qty, unit, variant_size, variant_color, cost_price)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  const createdIds = [];
+  const insertAll = db.transaction((items) => {
+    for (const p of items) {
+      const result = insertProduct.run(
+        p.sku,
+        p.barcode,
+        p.name,
+        p.category,
+        p.mrp,
+        p.selling_price,
+        p.hsn_code || null,
+        p.tax_rate ?? 5,
+        p.stock_qty ?? 0,
+        p.unit || 'pcs',
+        p.variant_size || null,
+        p.variant_color || null,
+        p.cost_price || 0
+      );
+      createdIds.push(result.lastInsertRowid);
+    }
+  });
+
+  insertAll(products);
+
+  res.status(201).json({
+    success: true,
+    count: createdIds.length,
+    message: `Successfully created ${createdIds.length} variants`
+  });
+});
+
 // ── POST /api/products — Create product (supervisor only) ──
 router.post('/', requireRole('supervisor'), (req, res) => {
   const { sku, barcode, name, category, mrp, selling_price, hsn_code, tax_rate = 5, stock_qty = 0, unit = 'pcs' } = req.body;
