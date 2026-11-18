@@ -1,7 +1,9 @@
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const dbPath = path.join(__dirname, '..', 'pos.db');
+const isTest = process.env.NODE_ENV === 'test';
+const dbFile = isTest ? 'pos.test.db' : 'pos.db';
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', dbFile);
 const db = new Database(dbPath);
 
 // Enable WAL mode for better performance

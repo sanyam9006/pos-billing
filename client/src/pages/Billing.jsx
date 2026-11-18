@@ -132,7 +132,7 @@ export default function Billing({ cashier, onLogout }) {
         const res = await authFetch(`${API}/products/search?q=${encodeURIComponent(val)}`)
         if (res.ok) {
           const results = await res.json()
-          setSearchResults(results)
+          setSearchResults(Array.isArray(results) ? results : [])
         }
       } catch {}
     } else {

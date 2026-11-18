@@ -36,12 +36,24 @@ export default function Rentals({ cashier }) {
         let url = '/api/rentals/orders'
         if (statusFilter) url += `?status=${statusFilter}`
         const res = await authFetch(url)
-        if (res.ok) setOrders(await res.json())
+        const data = await res.json()
+        if (res.ok && Array.isArray(data)) {
+          setOrders(data)
+        } else {
+          setOrders([])
+          notify(data?.error || 'Failed to load rental orders', 'error')
+        }
       } else {
         let url = '/api/rentals/items'
         if (statusFilter) url += `?status=${statusFilter}`
         const res = await authFetch(url)
-        if (res.ok) setItems(await res.json())
+        const data = await res.json()
+        if (res.ok && Array.isArray(data)) {
+          setItems(data)
+        } else {
+          setItems([])
+          notify(data?.error || 'Failed to load rental items', 'error')
+        }
       }
     } catch {
       notify('Failed to load rental data', 'error')
@@ -49,20 +61,32 @@ export default function Rentals({ cashier }) {
     setLoading(false)
   }
 
-  const filteredOrders = orders.filter(o =>
-    o.customer_name?.toLowerCase().includes(search.toLowerCase()) ||
-    o.customer_phone?.includes(search) ||
-    o.order_number?.toLowerCase().includes(search.toLowerCase()) ||
-    o.item_name?.toLowerCase().includes(search.toLowerCase()) ||
-    o.item_barcode?.includes(search)
-  )
+  const filteredOrders = Array.isArray(orders)
+    ? orders.filter(o => {
+        if (!o) return false
+        const s = (search || '').toLowerCase()
+        return (
+          (o.customer_name || '').toLowerCase().includes(s) ||
+          (o.customer_phone || '').includes(search) ||
+          (o.order_number || '').toLowerCase().includes(s) ||
+          (o.item_name || '').toLowerCase().includes(s) ||
+          (o.item_barcode || '').includes(search)
+        )
+      })
+    : []
 
-  const filteredItems = items.filter(i =>
-    i.name?.toLowerCase().includes(search.toLowerCase()) ||
-    i.sku?.toLowerCase().includes(search.toLowerCase()) ||
-    i.barcode?.includes(search) ||
-    i.category?.toLowerCase().includes(search.toLowerCase())
-  )
+  const filteredItems = Array.isArray(items)
+    ? items.filter(i => {
+        if (!i) return false
+        const s = (search || '').toLowerCase()
+        return (
+          (i.name || '').toLowerCase().includes(s) ||
+          (i.sku || '').toLowerCase().includes(s) ||
+          (i.barcode || '').includes(search) ||
+          (i.category || '').toLowerCase().includes(s)
+        )
+      })
+    : []
 
   const printRentalSlip = async (orderId) => {
     try {

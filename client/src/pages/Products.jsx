@@ -27,17 +27,32 @@ export default function Products({ cashier }) {
   const loadProducts = async () => {
     try {
       const res = await authFetch('/api/products')
-      setProducts(await res.json())
-    } catch {}
+      const data = await res.json()
+      if (res.ok && Array.isArray(data)) {
+        setProducts(data)
+      } else {
+        setProducts([])
+        notify(data?.error || 'Failed to load products', 'error')
+      }
+    } catch {
+      setProducts([])
+      notify('Failed to load products', 'error')
+    }
     setLoading(false)
   }
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku.toLowerCase().includes(search.toLowerCase()) ||
-    p.category.toLowerCase().includes(search.toLowerCase()) ||
-    p.barcode.includes(search)
-  )
+  const filtered = Array.isArray(products)
+    ? products.filter(p => {
+        if (!p) return false
+        const s = (search || '').toLowerCase()
+        return (
+          (p.name || '').toLowerCase().includes(s) ||
+          (p.sku || '').toLowerCase().includes(s) ||
+          (p.category || '').toLowerCase().includes(s) ||
+          (p.barcode || '').includes(search)
+        )
+      })
+    : []
 
   const toggleSelectAll = (e) => {
     if (e.target.checked) {
