@@ -9,7 +9,10 @@ export default function Settings() {
     BILL_PREFIX: 'HOS-',
     DISCOUNT_PIN_THRESHOLD: '500',
     FOOTER_TEXT: 'Thank you for shopping at House of Sadaya! Exchange within 7 days with tag intact.',
-    THERMAL_WIDTH: '80mm'
+    THERMAL_WIDTH: '80mm',
+    RENT_OVERRIDE_PIN_THRESHOLD: '500',
+    RENTAL_COUNT_PICKUP_DAY: '1',
+    RENTAL_EARLY_RETURN_REFUND: '0'
   })
 
   const [loading, setLoading] = useState(true)
@@ -32,6 +35,23 @@ export default function Settings() {
     loadStaff()
   }, [])
 
+  const loadSettings = async () => {
+    try {
+      setLoading(true)
+      const res = await authFetch('/api/settings')
+      if (res.ok) {
+        const data = await res.json()
+        if (data.settings) {
+          setSettings(prev => ({ ...prev, ...data.settings }))
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load settings:', err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const loadStaff = async () => {
     try {
       const res = await authFetch('/api/auth/cashiers')
@@ -41,6 +61,64 @@ export default function Settings() {
       }
     } catch (err) {
       console.error('Failed to load staff:', err)
+    }
+  }
+
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setSettings(prev => ({ ...prev, [name]: value }))
+  }
+
+  const handleSave = async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await authFetch('/api/settings', {
+        method: 'PUT',
+        body: JSON.stringify(settings)
+      })
+      if (res.ok) {
+        clearStoreConfigCache()
+        setMessage({ type: 'success', text: '✅ Boutique settings updated and applied successfully!' })
+        setTimeout(() => setMessage(null), 4000)
+      } else {
+        const err = await res.json()
+        setMessage({ type: 'error', text: err.error || 'Failed to update settings.' })
+      }
+    } catch {
+      setMessage({ type: 'error', text: 'Network error while saving settings.' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleBackupNow = async () => {
+    setBackupMsg('Creating database backup...')
+    try {
+      const res = await authFetch('/api/settings/backup-now', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        setBackupMsg(`✅ Backup created successfully: ${data.file}`)
+      } else {
+        setBackupMsg(`❌ Backup failed: ${data.error}`)
+      }
+    } catch {
+      setBackupMsg('❌ Error triggering backup')
+    }
+    setTimeout(() => setBackupMsg(null), 5000)
+  }
+
+  const loadAuditLogs = async () => {
+    try {
+      const res = await authFetch('/api/reports/audit-logs')
+      if (res.ok) {
+        const data = await res.json()
+        setAuditLogs(data)
+        setShowAudit(true)
+      }
+    } catch (err) {
+      console.error('Failed to load audit logs:', err)
     }
   }
 
@@ -73,7 +151,7 @@ export default function Settings() {
         role: staffForm.role,
         is_active: staffForm.is_active ? 1 : 0
       }
-      if (staffForm.pin.trim()) {
+      if (staffForm.pin && staffForm.pin.trim()) {
         payload.pin = staffForm.pin.trim()
       } else if (!isEdit) {
         setStaffMsg({ type: 'error', text: '4-digit PIN is required for new staff' })
@@ -91,8 +169,9 @@ export default function Settings() {
         setShowStaffModal(false)
         loadStaff()
         setMessage({ type: 'success', text: `✅ Staff member ${payload.name} saved successfully!` })
+        setTimeout(() => setMessage(null), 4000)
       } else {
-        setStaffMsg({ type: 'error', text: data.error || 'Failed to save staff' })
+        setStaffMsg({ type: 'error', text: data.error || 'Failed to save staff member' })
       }
     } catch {
       setStaffMsg({ type: 'error', text: 'Network error saving staff' })
@@ -111,6 +190,7 @@ export default function Settings() {
       if (res.ok) {
         loadStaff()
         setMessage({ type: 'success', text: `Status for ${st.name} updated!` })
+        setTimeout(() => setMessage(null), 3000)
       } else {
         const err = await res.json()
         setMessage({ type: 'error', text: err.error || 'Failed to update status' })
@@ -120,314 +200,247 @@ export default function Settings() {
     }
   }
 
-  const loadSettings = async () => {
-    try {
-      setLoading(true)
-      const res = await authFetch('/api/settings')
-      if (res.ok) {
-        const data = await res.json()
-        if (data.settings) {
-          setSettings(prev => ({ ...prev, ...data.settings }))
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load settings:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleChange = (e) => {
-    const { name, value } = e.target
-    setSettings(prev => ({ ...prev, [name]: value }))
-  }
-
-  const handleSave = async (e) => {
-    e.preventDefault()
-    setSaving(true)
-    setMessage(null)
-    try {
-      const res = await authFetch('/api/settings', {
-        method: 'PUT',
-        body: JSON.stringify(settings)
-      })
-      if (res.ok) {
-        clearStoreConfigCache()
-        setMessage({ type: 'success', text: '✅ Boutique settings updated and applied successfully!' })
-      } else {
-        const err = await res.json()
-        setMessage({ type: 'error', text: err.error || 'Failed to update settings.' })
-      }
-    } catch {
-      setMessage({ type: 'error', text: 'Network error while saving settings.' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleBackupNow = async () => {
-    setBackupMsg('Creating database backup...')
-    try {
-      const res = await authFetch('/api/settings/backup-now', { method: 'POST' })
-      const data = await res.json()
-      if (res.ok) {
-        setBackupMsg(`✅ Backup created successfully: ${data.file}`)
-      } else {
-        setBackupMsg(`❌ Backup failed: ${data.error}`)
-      }
-    } catch {
-      setBackupMsg('❌ Error triggering backup')
-    }
-  }
-
-  const loadAuditLogs = async () => {
-    try {
-      const res = await authFetch('/api/reports/audit-logs')
-      if (res.ok) {
-        const data = await res.json()
-        setAuditLogs(data)
-        setShowAudit(true)
-      }
-    } catch (err) {
-      console.error('Failed to load audit logs:', err)
-    }
-  }
-
   if (loading) {
-    return <div className="p-8 text-center text-gray-500">Loading boutique settings...</div>
+    return (
+      <div className="page settings-page" style={{ textAlign: 'center', padding: '60px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '15px' }}>Loading boutique settings...</p>
+      </div>
+    )
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            <span>⚙️</span> Boutique Store Settings
-          </h1>
-          <p className="text-sm text-gray-500">Configure branding, print sizes, and store policies</p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleBackupNow}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium shadow-sm transition flex items-center gap-2 text-sm"
-          >
-            <span>📦</span> Backup Database Now
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (showAudit) setShowAudit(false)
-              else loadAuditLogs()
-            }}
-            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium border text-sm transition"
-          >
-            {showAudit ? 'Hide Audit Log' : '🔍 View Audit Log'}
-          </button>
-        </div>
-      </div>
-
+    <div className="page settings-page">
+      {/* Top Banner Alerts */}
       {backupMsg && (
-        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm flex items-center justify-between">
-          <span>{backupMsg}</span>
-          <button onClick={() => setBackupMsg(null)} className="text-blue-500 font-bold ml-4">✕</button>
+        <div className="toast info" style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 2000 }}>
+          {backupMsg}
         </div>
       )}
-
       {message && (
-        <div className={`mb-6 p-4 rounded-lg text-sm ${message.type === 'success' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+        <div className={`toast ${message.type}`} style={{ position: 'fixed', top: '20px', right: '20px', zIndex: 2000 }}>
           {message.text}
         </div>
       )}
 
-      {/* Audit Log Modal / Panel */}
+      {/* Page Header */}
+      <div className="page-header">
+        <div>
+          <h1>⚙️ Boutique Store Settings</h1>
+          <p className="page-subtitle">Configure branding, print sizes, staff logins, and store security policies</p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button type="button" onClick={handleBackupNow} className="btn-primary btn-sm" style={{ background: '#2E7D32' }}>
+            📦 Backup Database Now
+          </button>
+          <button type="button" onClick={() => { if (showAudit) setShowAudit(false); else loadAuditLogs(); }} className="btn-secondary">
+            {showAudit ? '✕ Close Audit' : '🔍 View Audit Log'}
+          </button>
+        </div>
+      </div>
+
+      {/* Audit Log Modal */}
       {showAudit && (
-        <div className="mb-6 p-4 bg-gray-50 border border-gray-200 rounded-xl shadow-sm">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-gray-800 text-base">📋 Security & Audit Trail (Last 100 Actions)</h3>
-            <button onClick={() => setShowAudit(false)} className="text-gray-400 hover:text-gray-600">✕ Close</button>
-          </div>
-          <div className="max-h-60 overflow-y-auto border bg-white rounded-lg text-xs">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-gray-100 border-b">
-                <tr>
-                  <th className="p-2">Timestamp</th>
-                  <th className="p-2">Staff</th>
-                  <th className="p-2">Action</th>
-                  <th className="p-2">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {auditLogs.map(log => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="p-2 text-gray-500 whitespace-nowrap">{log.created_at}</td>
-                    <td className="p-2 font-medium">{log.cashier_name || 'Staff'}</td>
-                    <td className="p-2 font-mono text-purple-700">{log.action}</td>
-                    <td className="p-2 text-gray-600 truncate max-w-xs">{log.details_json}</td>
+        <div className="modal-overlay" onClick={() => setShowAudit(false)}>
+          <div className="modal" style={{ maxWidth: '800px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <h2>
+              <span>📋 Security & Audit Trail (Last 100 Actions)</span>
+              <button type="button" className="modal-close" onClick={() => setShowAudit(false)}>✕</button>
+            </h2>
+            <div className="table-container" style={{ maxHeight: '350px', overflowY: 'auto' }}>
+              <table className="data-table compact">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Staff</th>
+                    <th>Action</th>
+                    <th>Details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {auditLogs.map(log => (
+                    <tr key={log.id}>
+                      <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{log.created_at}</td>
+                      <td><strong>{log.cashier_name || 'Staff'}</strong></td>
+                      <td><code style={{ color: 'var(--accent-dark)' }}>{log.action}</code></td>
+                      <td style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {log.details_json}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="modal-actions" style={{ marginTop: '16px' }}>
+              <button type="button" className="modal-btn secondary" onClick={() => setShowAudit(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-6">
-        {/* Section 1: Store Branding */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
-            <span>👗</span> Boutique Identity & Receipts
-          </h2>
-          <div className="flex items-center gap-4 mb-4 pb-4 border-b">
-            <img
-              src="/logo.png"
-              alt="House of Sadaya Logo"
-              style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'contain', background: '#fff', border: '1px solid #e5e7eb' }}
-            />
+      {/* Main Settings Form */}
+      <form onSubmit={handleSave}>
+        {/* Section 1: Store Branding & Receipts */}
+        <div className="settings-card">
+          <div className="settings-card-header">
+            <div className="settings-card-title">
+              <h2>👗 Boutique Identity & Receipts</h2>
+            </div>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>House of Sadaya</span>
+          </div>
+
+          <div className="logo-preview-box">
+            <img src="/logo.png" alt="House of Sadaya" className="logo-preview-img" />
             <div>
-              <div className="font-bold text-gray-800 text-sm">Official Boutique Logo</div>
-              <div className="text-xs text-gray-500">Active and printed at the top of every sales bill, rental agreement slip, and tailoring job card</div>
+              <div style={{ fontWeight: 800, fontSize: '14px', color: 'var(--text-primary)' }}>
+                Official Boutique Logo
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                Active and automatically printed on every bill, rental agreement slip, and tailoring job card.
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Store / Brand Name</label>
+
+          <div className="settings-grid-2">
+            <div className="settings-field">
+              <label>Store / Brand Name</label>
               <input
                 type="text"
                 name="STORE_NAME"
                 value={settings.STORE_NAME}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
                 required
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Store Phone / WhatsApp</label>
+
+            <div className="settings-field">
+              <label>Store Phone / WhatsApp</label>
               <input
                 type="text"
                 name="STORE_PHONE"
                 value={settings.STORE_PHONE}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                placeholder="e.g. 7568458575"
               />
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Store Address</label>
+
+            <div className="settings-field span-2">
+              <label>Store Address</label>
               <input
                 type="text"
                 name="STORE_ADDRESS"
                 value={settings.STORE_ADDRESS}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                placeholder="4/8 Housing board Tonk Rajasthan"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Bill / Invoice Number Prefix</label>
+
+            <div className="settings-field">
+              <label>Bill Number Prefix</label>
               <input
                 type="text"
                 name="BILL_PREFIX"
                 value={settings.BILL_PREFIX}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none"
-                placeholder="e.g. AB-, AURA-"
+                style={{ fontFamily: 'JetBrains Mono, monospace' }}
               />
-              <span className="text-xs text-gray-400">Example: {settings.BILL_PREFIX}20261117-0001</span>
+              <span className="field-hint">Example bill: {settings.BILL_PREFIX}20261118-0001</span>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Receipt Print Width</label>
+
+            <div className="settings-field">
+              <label>Receipt Printer Size</label>
               <select
                 name="THERMAL_WIDTH"
                 value={settings.THERMAL_WIDTH}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
               >
-                <option value="80mm">80mm Thermal (Standard POS roll)</option>
-                <option value="58mm">58mm Thermal (Compact roll)</option>
+                <option value="80mm">80mm Thermal (Standard POS Roll)</option>
+                <option value="58mm">58mm Thermal (Compact POS Roll)</option>
                 <option value="a4">A4 Full Page (Desktop Printer)</option>
               </select>
             </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Receipt Footer Note</label>
+
+            <div className="settings-field span-2">
+              <label>Receipt Footer Note</label>
               <input
                 type="text"
                 name="FOOTER_TEXT"
                 value={settings.FOOTER_TEXT}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
               />
             </div>
           </div>
         </div>
 
         {/* Section 2: Staff & Cashier Login Management */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <div className="flex justify-between items-center mb-4 pb-2 border-b">
+        <div className="settings-card">
+          <div className="settings-card-header">
             <div>
-              <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                <span>👥</span> Staff & Cashier Login Management
-              </h2>
-              <p className="text-xs text-gray-500">Add boutique staff, reset/change PINs, or activate/deactivate counter accounts</p>
+              <div className="settings-card-title">
+                <h2>👥 Staff & Cashier Login Management</h2>
+              </div>
+              <div className="settings-card-subtitle">
+                Add staff, set/change 4-digit PINs, or activate/deactivate counter cashier logins
+              </div>
             </div>
             <button
               type="button"
               onClick={handleOpenNewStaff}
-              className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-xs shadow-sm transition flex items-center gap-1.5"
+              className="btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             >
               <span>➕</span> Add New Staff
             </button>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead className="bg-gray-50 border-b text-gray-600">
+          <div className="table-container">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <th className="p-3">Staff Name</th>
-                  <th className="p-3">Employee Code (Login ID)</th>
-                  <th className="p-3">Role & Permissions</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th>Staff Name</th>
+                  <th>Employee Code (Login ID)</th>
+                  <th>Role & Access</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y text-gray-700">
+              <tbody>
                 {staffList.map(st => (
-                  <tr key={st.id} className="hover:bg-gray-50">
-                    <td className="p-3 font-bold text-gray-900">{st.name}</td>
-                    <td className="p-3 font-mono font-semibold text-purple-700">{st.employee_code}</td>
-                    <td className="p-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        st.role === 'supervisor' 
-                          ? 'bg-purple-100 text-purple-800 border border-purple-200' 
-                          : 'bg-blue-100 text-blue-800 border border-blue-200'
-                      }`}>
+                  <tr key={st.id}>
+                    <td><strong>{st.name}</strong></td>
+                    <td>
+                      <code style={{ fontSize: '13px', color: 'var(--accent-dark)', fontWeight: 700 }}>
+                        {st.employee_code}
+                      </code>
+                    </td>
+                    <td>
+                      <span className={`role-pill ${st.role === 'supervisor' ? 'supervisor' : 'cashier'}`}>
                         {st.role === 'supervisor' ? '👑 Supervisor / Owner' : '🛒 Cashier'}
                       </span>
                     </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                        st.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                        {st.is_active ? '● Active' : '○ Deactivated'}
-                      </span>
+                    <td>
+                      {st.is_active ? (
+                        <span className="status-pill-active">● Active</span>
+                      ) : (
+                        <span className="status-pill-inactive">○ Deactivated</span>
+                      )}
                     </td>
-                    <td className="p-3 text-right space-x-2">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEditStaff(st)}
-                        className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-medium border text-xs"
-                      >
-                        ✏️ Edit / Change PIN
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStaffActive(st)}
-                        className={`px-3 py-1 rounded font-medium border text-xs ${
-                          st.is_active
-                            ? 'bg-red-50 hover:bg-red-100 text-red-600 border-red-200'
-                            : 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
-                        }`}
-                      >
-                        {st.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
+                    <td>
+                      <div className="action-btn-group">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditStaff(st)}
+                          className="btn-secondary"
+                        >
+                          ✏️ Edit / Change PIN
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStaffActive(st)}
+                          className={st.is_active ? 'btn-danger-outline' : 'btn-success-outline'}
+                        >
+                          {st.is_active ? 'Deactivate' : 'Activate'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -437,192 +450,183 @@ export default function Settings() {
         </div>
 
         {/* Section 3: Discounts & Owner Approvals */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
-            <span>🛡️</span> Security & Approvals
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Discount PIN Approval Threshold (₹)
-              </label>
-              <div className="relative max-w-xs">
-                <span className="absolute left-3 top-2.5 text-gray-400 text-sm">₹</span>
-                <input
-                  type="number"
-                  name="DISCOUNT_PIN_THRESHOLD"
-                  value={settings.DISCOUNT_PIN_THRESHOLD || 500}
-                  onChange={handleChange}
-                  className="w-full p-2.5 pl-8 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                />
-              </div>
-              <span className="text-xs text-gray-400 mt-1 block">
-                Discounts exceeding ₹{settings.DISCOUNT_PIN_THRESHOLD || 500} require Supervisor PIN.
+        <div className="settings-card">
+          <div className="settings-card-header">
+            <div className="settings-card-title">
+              <h2>🛡️ Security & PIN Approvals</h2>
+            </div>
+          </div>
+
+          <div className="settings-grid-2">
+            <div className="settings-field">
+              <label>Discount PIN Approval Threshold (₹)</label>
+              <input
+                type="number"
+                name="DISCOUNT_PIN_THRESHOLD"
+                value={settings.DISCOUNT_PIN_THRESHOLD || 500}
+                onChange={handleChange}
+              />
+              <span className="field-hint">
+                Discounts greater than ₹{settings.DISCOUNT_PIN_THRESHOLD || 500} prompt for Supervisor PIN.
               </span>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">
-                Rental Price Override PIN Threshold (₹)
-              </label>
-              <div className="relative max-w-xs">
-                <span className="absolute left-3 top-2.5 text-gray-400 text-sm">₹</span>
-                <input
-                  type="number"
-                  name="RENT_OVERRIDE_PIN_THRESHOLD"
-                  value={settings.RENT_OVERRIDE_PIN_THRESHOLD || 500}
-                  onChange={handleChange}
-                  className="w-full p-2.5 pl-8 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
-                />
-              </div>
-              <span className="text-xs text-gray-400 mt-1 block">
-                Rental manual price changes exceeding ₹{settings.RENT_OVERRIDE_PIN_THRESHOLD || 500} require Supervisor PIN.
+            <div className="settings-field">
+              <label>Rental Price Override Threshold (₹)</label>
+              <input
+                type="number"
+                name="RENT_OVERRIDE_PIN_THRESHOLD"
+                value={settings.RENT_OVERRIDE_PIN_THRESHOLD || 500}
+                onChange={handleChange}
+              />
+              <span className="field-hint">
+                Rental manual discounts exceeding ₹{settings.RENT_OVERRIDE_PIN_THRESHOLD || 500} require Supervisor PIN.
               </span>
             </div>
           </div>
         </div>
 
-        {/* Section 3: Rental Policies */}
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b flex items-center gap-2">
-            <span>👘</span> Bridal & Occasion Wear Rental Policies
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Per-Day Rental: Count Pickup Day</label>
+        {/* Section 4: Rental Policies */}
+        <div className="settings-card">
+          <div className="settings-card-header">
+            <div className="settings-card-title">
+              <h2>👘 Bridal & Occasion Wear Rental Policies</h2>
+            </div>
+          </div>
+
+          <div className="settings-grid-2">
+            <div className="settings-field">
+              <label>Per-Day Rental: Count Pickup Day</label>
               <select
                 name="RENTAL_COUNT_PICKUP_DAY"
                 value={settings.RENTAL_COUNT_PICKUP_DAY ?? '1'}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
               >
                 <option value="1">Yes — Count pickup day (same day return = 1 day, 2 days = 2 days)</option>
                 <option value="0">No — Calendar difference only (24hr blocks)</option>
               </select>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1">Early Return Policy (Per-Day)</label>
+            <div className="settings-field">
+              <label>Early Return Policy (Per-Day)</label>
               <select
                 name="RENTAL_EARLY_RETURN_REFUND"
                 value={settings.RENTAL_EARLY_RETURN_REFUND ?? '0'}
                 onChange={handleChange}
-                className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white"
               >
-                <option value="0">No automatic refund for early return (store policy standard)</option>
+                <option value="0">No automatic refund for early return (standard store policy)</option>
                 <option value="1">Enable pro-rated refund for unused days (PER_DAY only)</option>
               </select>
             </div>
           </div>
         </div>
 
-        {/* Submit */}
-        <div className="flex justify-end gap-4 pt-2">
+        {/* Submit Button */}
+        <div className="settings-footer">
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow transition disabled:opacity-50 text-base"
+            className="btn-save-settings"
           >
             {saving ? 'Saving...' : '💾 Save Boutique Settings'}
           </button>
         </div>
       </form>
 
-      {/* Staff Add/Edit Modal */}
+      {/* Staff Add / Edit Modal */}
       {showStaffModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4 pb-2 border-b">
-              <h3 className="font-bold text-gray-800 text-lg">
-                {editingStaff ? `✏️ Edit ${editingStaff.name}` : '➕ Add New Staff Member'}
-              </h3>
-              <button onClick={() => setShowStaffModal(false)} className="text-gray-400 hover:text-gray-600 text-lg">✕</button>
-            </div>
+        <div className="modal-overlay" onClick={() => setShowStaffModal(false)}>
+          <div className="modal" style={{ maxWidth: '460px' }} onClick={e => e.stopPropagation()}>
+            <h2>
+              <span>{editingStaff ? `✏️ Edit ${editingStaff.name}` : '➕ Add New Staff Member'}</span>
+              <button type="button" className="modal-close" onClick={() => setShowStaffModal(false)}>✕</button>
+            </h2>
 
             {staffMsg && (
-              <div className={`mb-4 p-3 rounded-lg text-xs ${staffMsg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
+              <div className={`toast ${staffMsg.type}`} style={{ position: 'static', marginBottom: '16px' }}>
                 {staffMsg.text}
               </div>
             )}
 
-            <form onSubmit={handleSaveStaff} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Staff Full Name *</label>
+            <form onSubmit={handleSaveStaff}>
+              <div className="form-group">
+                <label>Staff Full Name *</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Kavita Sharma"
                   value={staffForm.name}
                   onChange={e => setStaffForm(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full p-2.5 border rounded-lg text-sm focus:ring-2 focus:ring-purple-500 outline-none"
+                  autoFocus
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Employee Code / Login ID *</label>
+              <div className="form-group">
+                <label>Employee Code / Login ID *</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. EMP004"
                   value={staffForm.employee_code}
                   onChange={e => setStaffForm(prev => ({ ...prev, employee_code: e.target.value.toUpperCase() }))}
-                  className="w-full p-2.5 border rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-500 outline-none"
+                  style={{ fontFamily: 'JetBrains Mono, monospace' }}
                 />
-                <span className="text-[11px] text-gray-400">Used by staff to select or type their login account</span>
+                <span className="field-hint">Used by staff to identify or select their login account</span>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
+              <div className="form-group">
+                <label>
                   {editingStaff ? 'New 4-Digit PIN (leave blank to keep current)' : '4-Digit Login PIN *'}
                 </label>
                 <input
                   type="password"
                   maxLength={6}
-                  placeholder={editingStaff ? '•••• (leave blank to keep)' : 'Enter 4-digit PIN'}
+                  placeholder={editingStaff ? '•••• (leave blank to keep current)' : 'Enter 4-digit PIN'}
                   value={staffForm.pin}
                   onChange={e => setStaffForm(prev => ({ ...prev, pin: e.target.value }))}
-                  className="w-full p-2.5 border rounded-lg text-sm font-mono tracking-widest focus:ring-2 focus:ring-purple-500 outline-none"
+                  style={{ fontFamily: 'JetBrains Mono, monospace', letterSpacing: '4px' }}
                   required={!editingStaff}
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Role & Permissions *</label>
+              <div className="form-group">
+                <label>Role & Permissions *</label>
                 <select
                   value={staffForm.role}
                   onChange={e => setStaffForm(prev => ({ ...prev, role: e.target.value }))}
-                  className="w-full p-2.5 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-purple-500 outline-none"
                 >
-                  <option value="cashier">Cashier (Billing, barcode scan, returns, cash/UPI checkout)</option>
-                  <option value="supervisor">Supervisor / Owner (Reports, discounts override, settings, staff)</option>
+                  <option value="cashier">Cashier (Daily Billing, Scanner, Returns, Payments)</option>
+                  <option value="supervisor">Supervisor / Owner (Reports, Settings, Staff, Overrides)</option>
                 </select>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '14px 0' }}>
                 <input
                   type="checkbox"
                   id="staff_active"
                   checked={staffForm.is_active}
                   onChange={e => setStaffForm(prev => ({ ...prev, is_active: e.target.checked }))}
-                  className="w-4 h-4 text-purple-600 rounded"
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
                 />
-                <label htmlFor="staff_active" className="text-xs font-semibold text-gray-700">Account is Active (can login)</label>
+                <label htmlFor="staff_active" style={{ fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                  Account is Active (can login to POS)
+                </label>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t">
+              <div className="modal-actions">
                 <button
                   type="button"
+                  className="modal-btn secondary"
                   onClick={() => setShowStaffModal(false)}
-                  className="px-4 py-2 border rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  className="modal-btn primary"
                   disabled={staffSaving}
-                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shadow transition disabled:opacity-50"
                 >
-                  {staffSaving ? 'Saving...' : editingStaff ? 'Save Changes' : 'Create Staff'}
+                  {staffSaving ? 'Saving...' : editingStaff ? 'Save Changes' : 'Create Staff Member'}
                 </button>
               </div>
             </form>
