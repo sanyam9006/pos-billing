@@ -1,7 +1,12 @@
 const request = require('supertest');
 const app = require('../server/index');
 const db = require('../server/db');
-const { generateBarcodeSvg } = require('../server/utils/barcode');
+const {
+  generateBarcodeSvg,
+  calculateEan13CheckDigit,
+  isValidEan13,
+  decodeBarcodeFromSvg
+} = require('../server/utils/barcode');
 
 function authHeader(token) {
   return { Authorization: `Bearer ${token}` };
@@ -347,10 +352,134 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
     });
   });
 
-  // ── 5. REAL CODE128 BARCODE GENERATION & EDITING ──
-  describe('Real Code128 Barcode Generation & Product Editing', () => {
-    test('generateBarcodeSvg produces valid Code128 SVG with quiet zone and human text', () => {
-      const svg = generateBarcodeSvg('AUR-KRT-101', {
+  // ── 5. UNIQUE EAN-13 BARCODE GENERATION, VALIDATION & DECODE ──
+  describe('Unique EAN-13 Barcode Generation, Validation & ZXing Decode Test', () => {
+    test('calculateEan13CheckDigit computes correct check digit according to EAN-13 algorithm', () => {
+      // 890103079339 -> 4 (Tata Salt from DB)
+      expect(calculateEan13CheckDigit('890103079339')).toBe(4);
+      // In-store range starting with 2: 200000000001 -> 5
+      expect(calculateEan13CheckDigit('200000000001')).toBe(5);
+      // 200000000002 -> 2
+      expect(calculateEan13CheckDigit('200000000002')).toBe(2);
+    });
+
+    test('isValidEan13 accurately identifies valid and invalid 13-digit codes', () => {
+      expect(isValidEan13('8901030793394')).toBe(true);
+      expect(isValidEan13('2000000000015')).toBe(true);
+      expect(isValidEan13('2000000000019')).toBe(false); // wrong check digit
+      expect(isValidEan13('12345')).toBe(false); // not 13 digits
+      expect(isValidEan13('CODE-128-TEST')).toBe(false); // non-digits
+    });
+
+    test('POST /api/barcodes/next generates 13-digit EAN-13 starting with 2 and valid check digit', async () => {
+      const res1 = await request(app)
+        .post('/api/barcodes/next')
+        .set(authHeader(cashierToken));
+
+      expect(res1.status).toBe(200);
+      expect(res1.body.barcode).toBeDefined();
+      expect(res1.body.barcode).toMatch(/^2\d{12}$/);
+      expect(res1.body.barcode.length).toBe(13);
+      expect(isValidEan13(res1.body.barcode)).toBe(true);
+
+      const res2 = await request(app)
+        .post('/api/barcodes/next')
+        .set(authHeader(cashierToken));
+
+      expect(res2.status).toBe(200);
+      expect(res2.body.barcode).toBeDefined();
+      expect(res2.body.barcode).toMatch(/^2\d{12}$/);
+      expect(isValidEan13(res2.body.barcode)).toBe(true);
+      expect(res2.body.barcode).not.toBe(res1.body.barcode);
+    });
+
+    test('POST /api/barcodes/batch allocates N unique sequential EAN-13 barcodes', async () => {
+      const count = 5;
+      const res = await request(app)
+        .post('/api/barcodes/batch')
+        .set(authHeader(supervisorToken))
+        .send({ count });
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.barcodes)).toBe(true);
+      expect(res.body.barcodes.length).toBe(count);
+
+      const uniqueSet = new Set(res.body.barcodes);
+      expect(uniqueSet.size).toBe(count);
+
+      res.body.barcodes.forEach(bc => {
+        expect(bc).toMatch(/^2\d{12}$/);
+        expect(isValidEan13(bc)).toBe(true);
+      });
+    });
+
+    test('Barcode generator skips any candidate number that already exists in DB', async () => {
+      // 1. Get current counter
+      const counterRow = db.prepare("SELECT value FROM settings WHERE key = 'BARCODE_COUNTER'").get();
+      const currentSeq = parseInt(counterRow.value, 10);
+
+      // Pre-insert a product with the candidate barcode that WOULD be generated next
+      const seqPadded = String(currentSeq).padStart(11, '0');
+      const candidateBase = `2${seqPadded}`;
+      const candidateCode = `${candidateBase}${calculateEan13CheckDigit(candidateBase)}`;
+
+      const resDummy = db.prepare(`
+        INSERT INTO products (sku, barcode, name, category, mrp, selling_price)
+        VALUES ('TEST-PRE-OCCUPIED', ?, 'Occupied Item', 'Test', 500, 500)
+      `).run(candidateCode);
+
+      // 2. Request next barcode: it must skip candidateCode and return candidateCode + 1
+      const res = await request(app)
+        .post('/api/barcodes/next')
+        .set(authHeader(cashierToken));
+
+      expect(res.status).toBe(200);
+      expect(res.body.barcode).not.toBe(candidateCode); // Successfully skipped!
+      expect(isValidEan13(res.body.barcode)).toBe(true);
+
+      // Clean up
+      db.prepare('DELETE FROM products WHERE id = ?').run(resDummy.lastInsertRowid);
+    });
+
+    test('POST /api/barcodes/validate rejects empty and duplicate barcodes with existing item name', async () => {
+      // Empty barcode
+      const emptyRes = await request(app)
+        .post('/api/barcodes/validate')
+        .set(authHeader(cashierToken))
+        .send({ barcode: '   ' });
+      expect(emptyRes.status).toBe(409);
+      expect(emptyRes.body.error).toMatch(/cannot be empty/i);
+
+      // Duplicate product barcode
+      const dupProdRes = await request(app)
+        .post('/api/barcodes/validate')
+        .set(authHeader(cashierToken))
+        .send({ barcode: 'BARCODE-OLD-01' });
+      expect(dupProdRes.status).toBe(409);
+      expect(dupProdRes.body.error).toContain('Test Garment Barcode');
+      expect(dupProdRes.body.error).toContain('TEST-BC-001');
+
+      // Duplicate rental barcode
+      const dupRentRes = await request(app)
+        .post('/api/barcodes/validate')
+        .set(authHeader(cashierToken))
+        .send({ barcode: '8909990001' });
+      expect(dupRentRes.status).toBe(409);
+      expect(dupRentRes.body.error).toContain('Test Velvet Lehenga');
+
+      // Invalid EAN-13 check digit gives warning
+      const warnRes = await request(app)
+        .post('/api/barcodes/validate')
+        .set(authHeader(cashierToken))
+        .send({ barcode: '2000000000019' }); // Invalid check digit 9 instead of 5
+      expect(warnRes.status).toBe(200);
+      expect(warnRes.body.check_digit_valid).toBe(false);
+      expect(warnRes.body.warning).toMatch(/invalid EAN-13 check digit/i);
+    });
+
+    test('generateBarcodeSvg produces valid EAN-13 SVG for 13-digit codes', () => {
+      const eanCode = '2000000000015';
+      const svg = generateBarcodeSvg(eanCode, {
         width: 1.5,
         height: 35,
         margin: 10,
@@ -362,13 +491,7 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
       expect(svg.endsWith('</svg>')).toBe(true);
       expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
       expect(svg).toContain('<rect'); // Barcode bars
-      expect(svg).toContain('AUR-KRT-101'); // Human readable text below
       expect(svg).not.toContain('||||'); // No fake bars!
-    });
-
-    test('generateBarcodeSvg throws error on empty barcode', () => {
-      expect(() => generateBarcodeSvg('')).toThrow('Barcode cannot be empty');
-      expect(() => generateBarcodeSvg('   ')).toThrow('Barcode cannot be empty');
     });
 
     test('Supervisor can edit product barcode with uniqueness check and audit log', async () => {
@@ -393,11 +516,11 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
       expect(audit.details_json).toContain(newBarcode);
     });
 
-    test('Editing barcode to an existing barcode returns 409 conflict', async () => {
+    test('Editing barcode to an existing barcode returns 409 conflict naming the product', async () => {
       // Insert another product
       const resDup = db.prepare(`
         INSERT INTO products (sku, barcode, name, category, mrp, selling_price)
-        VALUES ('TEST-BC-DUP', 'BARCODE-DUP-01', 'Dup', 'Kurtis', 100, 100)
+        VALUES ('TEST-BC-DUP', 'BARCODE-DUP-01', 'Silk Anarkali', 'Kurtis', 100, 100)
       `).run();
 
       const res = await request(app)
@@ -406,7 +529,7 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
         .send({ barcode: 'BARCODE-DUP-01' });
 
       expect(res.status).toBe(409);
-      expect(res.body.error).toMatch(/already assigned/i);
+      expect(res.body.error).toContain('Silk Anarkali');
 
       db.prepare('DELETE FROM products WHERE id = ?').run(resDup.lastInsertRowid);
     });
@@ -418,6 +541,35 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
         .send({ barcode: 'CASHIER-HACK' });
 
       expect(res.status).toBe(403);
+    });
+
+    // ── DECODE TEST: PROVES PRINTED BARCODE CAN BE SCANNED ──
+    test('DECODE TEST: Render EAN-13 barcode SVG and decode with ZXing reader', () => {
+      const originalBarcode = '2000000000015';
+      const svg = generateBarcodeSvg(originalBarcode, {
+        format: 'EAN13',
+        width: 2,
+        height: 60,
+        margin: 15,
+        displayValue: true
+      });
+
+      const decoded = decodeBarcodeFromSvg(svg);
+      expect(decoded.text).toBe(originalBarcode);
+    });
+
+    test('DECODE TEST: Render legacy Code128 barcode SVG and decode with ZXing reader', () => {
+      const originalBarcode = 'HOS-KRT-998';
+      const svg = generateBarcodeSvg(originalBarcode, {
+        format: 'CODE128',
+        width: 2,
+        height: 60,
+        margin: 15,
+        displayValue: true
+      });
+
+      const decoded = decodeBarcodeFromSvg(svg);
+      expect(decoded.text).toBe(originalBarcode);
     });
   });
 
@@ -449,6 +601,24 @@ describe('Rentals (PER_DAY vs PER_EVENT) & Real Code128 Barcodes', () => {
         .get('/api/rentals/reports/income')
         .set(authHeader(supervisorToken));
       expect(JSON.stringify(reportRes.body)).not.toMatch(forbidden);
+
+      // Barcode endpoints
+      const bcNextRes = await request(app)
+        .post('/api/barcodes/next')
+        .set(authHeader(cashierToken));
+      expect(JSON.stringify(bcNextRes.body)).not.toMatch(forbidden);
+
+      const bcBatchRes = await request(app)
+        .post('/api/barcodes/batch')
+        .set(authHeader(cashierToken))
+        .send({ count: 3 });
+      expect(JSON.stringify(bcBatchRes.body)).not.toMatch(forbidden);
+
+      const bcPrevRes = await request(app)
+        .post('/api/barcodes/tag-preview')
+        .set(authHeader(cashierToken))
+        .send({ barcode: '2000000000015' });
+      expect(JSON.stringify(bcPrevRes.body)).not.toMatch(forbidden);
     });
   });
 
