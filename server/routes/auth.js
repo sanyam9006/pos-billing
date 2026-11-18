@@ -106,6 +106,74 @@ router.post('/cashiers', authMiddleware, requireRole('supervisor'), (req, res) =
   res.status(201).json(created);
 });
 
+// ── PUT /api/auth/cashiers/:id — Update staff member / PIN (supervisor only) ──
+router.put('/cashiers/:id', authMiddleware, requireRole('supervisor'), (req, res) => {
+  const { name, employee_code, pin, role, is_active } = req.body;
+  const targetId = req.params.id;
+
+  const staff = db.prepare('SELECT * FROM cashiers WHERE id = ?').get(targetId);
+  if (!staff) {
+    return res.status(404).json({ error: 'Staff member not found' });
+  }
+
+  if (employee_code && employee_code.trim() !== staff.employee_code) {
+    const existing = db.prepare('SELECT id FROM cashiers WHERE employee_code = ? AND id != ?').get(employee_code.trim(), targetId);
+    if (existing) {
+      return res.status(409).json({ error: `Employee code ${employee_code} already in use` });
+    }
+  }
+
+  const updatedName = name !== undefined ? name.trim() : staff.name;
+  const updatedCode = employee_code !== undefined ? employee_code.trim() : staff.employee_code;
+  const updatedRole = role !== undefined ? role : staff.role;
+  const updatedActive = is_active !== undefined ? (is_active ? 1 : 0) : staff.is_active;
+  const updatedPin = (pin && String(pin).trim()) ? hashPin(String(pin).trim()) : staff.pin;
+
+  db.prepare(`
+    UPDATE cashiers 
+    SET name = ?, employee_code = ?, pin = ?, role = ?, is_active = ?
+    WHERE id = ?
+  `).run(updatedName, updatedCode, updatedPin, updatedRole, updatedActive, targetId);
+
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'staff_updated',
+    entity_type: 'cashier',
+    entity_id: targetId,
+    details: { name: updatedName, employee_code: updatedCode, role: updatedRole, is_active: updatedActive, pin_changed: !!(pin && String(pin).trim()) }
+  });
+
+  const updated = db.prepare('SELECT id, name, employee_code, role, is_active FROM cashiers WHERE id = ?').get(targetId);
+  res.json({ success: true, cashier: updated });
+});
+
+// ── DELETE /api/auth/cashiers/:id — Deactivate staff member (supervisor only) ──
+router.delete('/cashiers/:id', authMiddleware, requireRole('supervisor'), (req, res) => {
+  const targetId = req.params.id;
+  if (Number(targetId) === Number(req.cashier.id)) {
+    return res.status(400).json({ error: 'Cannot deactivate your own logged-in supervisor account' });
+  }
+
+  const staff = db.prepare('SELECT * FROM cashiers WHERE id = ?').get(targetId);
+  if (!staff) {
+    return res.status(404).json({ error: 'Staff member not found' });
+  }
+
+  db.prepare('UPDATE cashiers SET is_active = 0 WHERE id = ?').run(targetId);
+
+  logAudit({
+    cashier_id: req.cashier.id,
+    cashier_name: req.cashier.name,
+    action: 'staff_deactivated',
+    entity_type: 'cashier',
+    entity_id: targetId,
+    details: { name: staff.name, employee_code: staff.employee_code }
+  });
+
+  res.json({ success: true, message: `Staff member ${staff.name} deactivated` });
+});
+
 // ── POST /api/auth/logout ──
 router.post('/logout', (req, res) => {
   res.json({ success: true });
