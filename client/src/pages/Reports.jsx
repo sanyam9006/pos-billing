@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice } from '../utils/api'
+import {
+  HourlySalesBarChart,
+  PaymentDistributionChart,
+  DailySalesTrendChart,
+  TopProductsBarChart,
+  ProfitMarginMeter
+} from '../components/Charts'
+import SalesTimeline from '../components/SalesTimeline'
 
 export default function Reports() {
   const [activeTab, setActiveTab] = useState('x-report')
@@ -10,6 +18,8 @@ export default function Reports() {
     to: new Date().toISOString().slice(0, 10)
   })
   const [zDate, setZDate] = useState(new Date().toISOString().slice(0, 10))
+  const [selectedDayTimeline, setSelectedDayTimeline] = useState(null)
+  const [loadingDayTimeline, setLoadingDayTimeline] = useState(false)
   const [customerPhone, setCustomerPhone] = useState('')
   const [customerHistory, setCustomerHistory] = useState(null)
 
@@ -21,6 +31,7 @@ export default function Reports() {
 
   const loadReport = async () => {
     setLoading(true)
+    setSelectedDayTimeline(null)
     try {
       let url = ''
       switch (activeTab) {
@@ -40,6 +51,21 @@ export default function Reports() {
       console.error(err)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadDayTimeline = async (dayDate) => {
+    setLoadingDayTimeline(true)
+    try {
+      const res = await authFetch(`/api/reports/day-transactions?date=${dayDate}`)
+      if (res.ok) {
+        const result = await res.json()
+        setSelectedDayTimeline(result)
+      }
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingDayTimeline(false)
     }
   }
 
@@ -63,8 +89,8 @@ export default function Reports() {
   const tabs = [
     { id: 'x-report', label: '📊 X Report', desc: 'Current shift' },
     { id: 'z-report', label: '📋 Z Report', desc: 'End of day' },
-    { id: 'profit', label: '💰 Profit & Margin', desc: 'Cost vs Revenue' },
     { id: 'daily', label: '📅 Daily Sales', desc: 'Date range trends' },
+    { id: 'profit', label: '💰 Profit & Margin', desc: 'Cost vs Revenue' },
     { id: 'top-products', label: '🏆 Top Sellers', desc: 'Best selling items' },
     { id: 'rental-income', label: '👘 Rental Income', desc: 'Per-day vs per-event' },
     { id: 'slow-movers', label: '🐢 Slow Movers', desc: 'Dead / low stock' },
@@ -78,7 +104,7 @@ export default function Reports() {
       <div className="page-header">
         <div>
           <h1>📈 Boutique Reports & Analytics</h1>
-          <p className="page-subtitle">Sales audits, profit margins, top sellers, and customer history</p>
+          <p className="page-subtitle">Real-time shift audits, hourly sales velocity, charts, and customer purchase history</p>
         </div>
       </div>
 
@@ -96,69 +122,311 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* Date controls */}
+      {/* Date controls for Z-Report */}
       {activeTab === 'z-report' && (
-        <div className="date-controls">
-          <label>Date:</label>
-          <input type="date" value={zDate} onChange={e => setZDate(e.target.value)} />
+        <div className="date-controls" style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <label style={{ fontWeight: 700, fontSize: '13px' }}>Audit Date:</label>
+          <input
+            type="date"
+            value={zDate}
+            onChange={e => setZDate(e.target.value)}
+            className="search-bar"
+            style={{ width: '180px', padding: '6px 10px' }}
+          />
+          <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Select any date to view historical EOD closing report & timeline</span>
         </div>
       )}
 
+      {/* Date range controls for multi-day reports */}
       {['daily', 'profit', 'top-products', 'cashier', 'rental-income'].includes(activeTab) && (
-        <div className="date-controls flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <label>From:</label>
-            <input type="date" value={dateRange.from} onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))} />
-            <label>To:</label>
-            <input type="date" value={dateRange.to} onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))} />
-            <button className="btn-primary btn-sm" onClick={loadReport}>Apply</button>
+        <div className="date-controls" style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: 700, fontSize: '13px' }}>From:</label>
+            <input
+              type="date"
+              value={dateRange.from}
+              onChange={e => setDateRange(prev => ({ ...prev, from: e.target.value }))}
+              className="search-bar"
+              style={{ width: '160px', padding: '6px 10px' }}
+            />
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: 700, fontSize: '13px' }}>To:</label>
+            <input
+              type="date"
+              value={dateRange.to}
+              onChange={e => setDateRange(prev => ({ ...prev, to: e.target.value }))}
+              className="search-bar"
+              style={{ width: '160px', padding: '6px 10px' }}
+            />
+          </div>
+          <button className="btn-primary btn-sm" onClick={loadReport}>Apply Date Filter</button>
         </div>
       )}
 
       {/* Customer history search bar */}
       {activeTab === 'customer-history' && (
-        <div className="date-controls flex items-center gap-3">
-          <label>Customer Mobile:</label>
+        <div className="date-controls" style={{ margin: '14px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <label style={{ fontWeight: 700, fontSize: '13px' }}>Customer Mobile Number:</label>
           <input
             type="text"
             placeholder="e.g. 9876543210"
             value={customerPhone}
             onChange={e => setCustomerPhone(e.target.value)}
-            className="p-1.5 border rounded text-sm font-mono"
+            className="search-bar"
+            style={{ width: '220px', padding: '6px 10px', fontFamily: 'monospace' }}
           />
-          <button className="btn-primary btn-sm" onClick={handleCustomerSearch}>Search History</button>
+          <button className="btn-primary btn-sm" onClick={handleCustomerSearch}>🔍 Search History</button>
         </div>
       )}
 
-      {loading && <div className="loading-state">Loading report data...</div>}
+      {loading && <div className="loading-state">Loading boutique analytics & charts...</div>}
 
       {/* Report Content */}
       {!loading && data && (
         <div className="report-content">
-          {/* ═══════════ PROFIT & MARGIN REPORT ═══════════ */}
-          {activeTab === 'profit' && (
+
+          {/* ═══════════════════════════════════════════════════════════════
+              X REPORT (CURRENT SHIFT) & Z REPORT (END OF DAY)
+              Includes Hourly Charts, Payment Donut, and Sales Timeline
+             ═══════════════════════════════════════════════════════════════ */}
+          {['x-report', 'z-report'].includes(activeTab) && (
             <div>
-              <div className="metric-cards mb-6">
-                <div className="metric-card">
-                  <div className="metric-label">Total Revenue</div>
-                  <div className="metric-val text-blue-600">{formatPrice(data.total_revenue)}</div>
+              {/* Top KPI Metric Cards */}
+              <div className="metric-cards">
+                <div className="metric-card gold">
+                  <div className="metric-header">
+                    <span className="metric-label">Gross Shift Sales</span>
+                    <span className="metric-icon">💰</span>
+                  </div>
+                  <div className="metric-val" style={{ color: 'var(--accent-secondary, #C9A227)' }}>
+                    {formatPrice(data.total_sales)}
+                  </div>
+                  <div className="metric-sub">Final MRP collected (0% tax)</div>
                 </div>
+
                 <div className="metric-card">
-                  <div className="metric-label">Total Cost of Goods</div>
-                  <div className="metric-val text-gray-600">{formatPrice(data.total_cost)}</div>
+                  <div className="metric-header">
+                    <span className="metric-label">Completed Transactions</span>
+                    <span className="metric-icon">🧾</span>
+                  </div>
+                  <div className="metric-val">{data.total_transactions}</div>
+                  <div className="metric-sub">Total bills issued this shift</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">Gross Profit</div>
-                  <div className="metric-val text-emerald-600 font-bold">{formatPrice(data.gross_profit)}</div>
+
+                <div className="metric-card green">
+                  <div className="metric-header">
+                    <span className="metric-label">Net Sales</span>
+                    <span className="metric-icon">📈</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#10B981' }}>
+                    {formatPrice(data.net_sales !== undefined ? data.net_sales : (data.total_sales - (data.refunds?.total || 0)))}
+                  </div>
+                  <div className="metric-sub">After subtracting refunds</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">Overall Margin</div>
-                  <div className="metric-val text-purple-600 font-bold">{data.overall_margin_pct}%</div>
+
+                <div className="metric-card amber">
+                  <div className="metric-header">
+                    <span className="metric-label">Total Discounts Given</span>
+                    <span className="metric-icon">🏷️</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#D97706' }}>
+                    {formatPrice(data.total_discounts)}
+                  </div>
+                  <div className="metric-sub">Coupons & supervisor approvals</div>
                 </div>
               </div>
 
-              <div className="report-section">
+              {/* Visual Charts Grid: Hourly Sales + Payment Breakdown */}
+              <div className="report-grid-2">
+                <HourlySalesBarChart hourlyData={data.hourly_sales || []} />
+                <PaymentDistributionChart
+                  payments={data.payment_breakdown || []}
+                  totalSales={data.total_sales}
+                />
+              </div>
+
+              {/* Cashier breakdown table for Z-Report */}
+              {activeTab === 'z-report' && data.cashier_breakdown && data.cashier_breakdown.length > 0 && (
+                <div className="report-section">
+                  <h3>👥 Staff Sales Performance</h3>
+                  <div className="table-responsive">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>Staff Name</th>
+                          <th>Employee Code</th>
+                          <th>Bills Created</th>
+                          <th>Total Revenue</th>
+                          <th>Share</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.cashier_breakdown.map(c => {
+                          const sharePct = data.total_sales > 0 ? Math.round((c.total_sales / data.total_sales) * 100) : 0
+                          return (
+                            <tr key={c.employee_code}>
+                              <td style={{ fontWeight: 600 }}>{c.name}</td>
+                              <td><code className="sku-code">{c.employee_code}</code></td>
+                              <td><strong>{c.transactions}</strong> bills</td>
+                              <td className="num font-bold" style={{ color: 'var(--accent-secondary)' }}>
+                                {formatPrice(c.total_sales)}
+                              </td>
+                              <td>
+                                <span className="category-badge" style={{ fontSize: '11px' }}>{sharePct}%</span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Top Selling Products in Shift */}
+              {data.top_products && data.top_products.length > 0 && (
+                <TopProductsBarChart products={data.top_products} />
+              )}
+
+              {/* ══════════════════════════════════════════════════════════
+                  CHRONOLOGICAL SALES TIMELINE ("When & What Was Sold")
+                 ══════════════════════════════════════════════════════════ */}
+              <SalesTimeline
+                timeline={data.sales_timeline || []}
+                title={activeTab === 'x-report' ? 'Current Shift Sales Log (When & What Was Sold)' : `End of Day Sales Log for ${data.date}`}
+              />
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              DAILY SALES TRENDS
+             ═══════════════════════════════════════════════════════════════ */}
+          {activeTab === 'daily' && data.days && (
+            <div>
+              {/* Daily Trend Chart */}
+              <DailySalesTrendChart days={data.days} />
+
+              <div className="report-section" style={{ marginTop: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                  <h3>📅 Daily Performance Breakdown</h3>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                    Click any day to view its detailed chronological sales audit log below
+                  </span>
+                </div>
+
+                <div className="table-responsive">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Bills Completed</th>
+                        <th>Total Revenue (MRP)</th>
+                        <th>Avg Bill Size</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.days.map(d => {
+                        const avg = d.transactions > 0 ? Math.round(d.total_sales / d.transactions) : 0
+                        const isSelected = selectedDayTimeline?.date === d.date
+                        return (
+                          <tr key={d.date} className={isSelected ? 'selected-row' : ''}>
+                            <td><strong style={{ fontFamily: 'monospace' }}>{d.date}</strong></td>
+                            <td>{d.transactions} bills</td>
+                            <td className="num font-bold" style={{ color: 'var(--accent-secondary)' }}>
+                              {formatPrice(d.total_sales)}
+                            </td>
+                            <td className="num">{formatPrice(avg)}</td>
+                            <td>
+                              <button
+                                className="btn-secondary btn-sm"
+                                style={{ padding: '3px 8px', fontSize: '11px' }}
+                                onClick={() => loadDayTimeline(d.date)}
+                              >
+                                🕒 View Timing & Items
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Drilldown Day Timeline */}
+              {loadingDayTimeline && <div className="loading-state">Loading day's sales timeline...</div>}
+              {selectedDayTimeline && !loadingDayTimeline && (
+                <SalesTimeline
+                  timeline={selectedDayTimeline.sales_timeline || []}
+                  title={`Sales Audit Log for ${selectedDayTimeline.date} (${formatPrice(selectedDayTimeline.total_sales || 0)})`}
+                />
+              )}
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              PROFIT & MARGIN REPORT
+             ═══════════════════════════════════════════════════════════════ */}
+          {activeTab === 'profit' && (
+            <div>
+              <div className="metric-cards">
+                <div className="metric-card">
+                  <div className="metric-header">
+                    <span className="metric-label">Total Revenue</span>
+                    <span className="metric-icon">💰</span>
+                  </div>
+                  <div className="metric-val" style={{ color: 'var(--accent-dark, #4582BD)' }}>
+                    {formatPrice(data.total_revenue)}
+                  </div>
+                  <div className="metric-sub">Final MRP sales</div>
+                </div>
+
+                <div className="metric-card amber">
+                  <div className="metric-header">
+                    <span className="metric-label">Cost of Goods (COGS)</span>
+                    <span className="metric-icon">📦</span>
+                  </div>
+                  <div className="metric-val" style={{ color: 'var(--text-muted)' }}>
+                    {formatPrice(data.total_cost)}
+                  </div>
+                  <div className="metric-sub">Wholesale / manufacturing cost</div>
+                </div>
+
+                <div className="metric-card green">
+                  <div className="metric-header">
+                    <span className="metric-label">Gross Profit</span>
+                    <span className="metric-icon">💵</span>
+                  </div>
+                  <div className="metric-val font-bold" style={{ color: '#10B981' }}>
+                    {formatPrice(data.gross_profit)}
+                  </div>
+                  <div className="metric-sub">Revenue minus COGS</div>
+                </div>
+
+                <div className="metric-card purple">
+                  <div className="metric-header">
+                    <span className="metric-label">Overall Margin</span>
+                    <span className="metric-icon">📊</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#8B5CF6' }}>
+                    {data.overall_margin_pct}%
+                  </div>
+                  <div className="metric-sub">Profit margin percentage</div>
+                </div>
+              </div>
+
+              {/* Profit Margin Visual Meter */}
+              <ProfitMarginMeter
+                marginPct={data.overall_margin_pct}
+                revenue={data.total_revenue}
+                cost={data.total_cost}
+                profit={data.gross_profit}
+              />
+
+              {/* Product Variant Profit Breakdown Table */}
+              <div className="report-section" style={{ marginTop: '20px' }}>
                 <h3>Product / Variant Profit Breakdown</h3>
                 <div className="table-responsive">
                   <table className="data-table">
@@ -179,16 +447,18 @@ export default function Reports() {
                           <td>
                             <strong>{p.name}</strong>
                             {(p.variant_size || p.variant_color) && (
-                              <div className="text-xs text-gray-500">Size: {p.variant_size || '—'} | Color: {p.variant_color || '—'}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                Size: {p.variant_size || '—'} | Color: {p.variant_color || '—'}
+                              </div>
                             )}
                           </td>
-                          <td>{p.units_sold}</td>
+                          <td>{p.units_sold} pcs</td>
                           <td>{formatPrice(p.cost_price)}</td>
                           <td>{formatPrice(p.total_cost)}</td>
-                          <td>{formatPrice(p.total_revenue)}</td>
-                          <td className="font-bold text-emerald-700">{formatPrice(p.profit)}</td>
+                          <td className="num font-bold">{formatPrice(p.total_revenue)}</td>
+                          <td className="num font-bold" style={{ color: '#10B981' }}>{formatPrice(p.profit)}</td>
                           <td>
-                            <span className={`badge ${p.margin_pct >= 40 ? 'badge-success' : 'badge-warning'}`}>
+                            <span className={`category-badge ${p.margin_pct >= 40 ? 'teal' : 'amber'}`}>
                               {p.margin_pct}%
                             </span>
                           </td>
@@ -201,197 +471,95 @@ export default function Reports() {
             </div>
           )}
 
-          {/* ═══════════ SLOW MOVERS REPORT ═══════════ */}
-          {activeTab === 'slow-movers' && (
-            <div className="report-section">
-              <div className="flex justify-between items-center mb-4">
-                <h3>🐢 Slow Movers & Inactive Garments (Last 30 Days)</h3>
-                <span className="text-sm text-gray-500">{data.count} items found with ≤ {data.max_sold} sales</span>
-              </div>
-              <div className="table-responsive">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Garment Name</th>
-                      <th>SKU / Barcode</th>
-                      <th>Category</th>
-                      <th>Variant</th>
-                      <th>Shelf Stock</th>
-                      <th>Selling Price</th>
-                      <th>Cost Price</th>
-                      <th>Qty Sold (30d)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(data.products || []).map(p => (
-                      <tr key={p.id}>
-                        <td className="font-medium">{p.name}</td>
-                        <td className="font-mono text-xs">{p.sku}<br/><span className="text-gray-400">{p.barcode}</span></td>
-                        <td>{p.category}</td>
-                        <td>{p.variant_size || '—'} / {p.variant_color || '—'}</td>
-                        <td className="font-bold">{p.stock_qty}</td>
-                        <td>{formatPrice(p.selling_price)}</td>
-                        <td>{formatPrice(p.cost_price)}</td>
-                        <td>
-                          <span className="badge badge-danger">{p.qty_sold} sold</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════ X & Z REPORT OVERVIEWS ═══════════ */}
-          {['x-report', 'z-report'].includes(activeTab) && (
-            <div>
-              <div className="metric-cards">
-                <div className="metric-card">
-                  <div className="metric-label">Total Transactions</div>
-                  <div className="metric-val">{data.total_transactions}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Gross Sales</div>
-                  <div className="metric-val text-green-600">{formatPrice(data.total_sales)}</div>
-                </div>
-                <div className="metric-card">
-                  <div className="metric-label">Total Discounts</div>
-                  <div className="metric-val text-amber-600">{formatPrice(data.total_discounts)}</div>
-                </div>
-              </div>
-
-              <div className="report-grid">
-                <div className="report-section">
-                  <h3>Payment Mode Breakdown</h3>
-                  <div className="table-responsive">
-                    <table className="data-table">
-                      <thead><tr><th>Method</th><th>Count</th><th>Total</th></tr></thead>
-                      <tbody>
-                        {(data.payment_breakdown || []).map(p => (
-                          <tr key={p.method}>
-                            <td className="font-medium capitalize">{p.method.replace('_', ' ')}</td>
-                            <td>{p.count}</td>
-                            <td>{formatPrice(p.total)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="report-section">
-                  <h3>Top Products</h3>
-                  <div className="table-responsive">
-                    <table className="data-table">
-                      <thead><tr><th>Product</th><th>Sold</th><th>Revenue</th></tr></thead>
-                      <tbody>
-                        {(data.top_products || []).map((p, i) => (
-                          <tr key={i}>
-                            <td>{p.name} {p.variant_size && `(${p.variant_size})`}</td>
-                            <td>{p.qty_sold}</td>
-                            <td>{formatPrice(p.revenue)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════ DAILY SALES ═══════════ */}
-          {activeTab === 'daily' && data.days && (
-            <div className="report-section">
-              <h3>Daily Sales Performance</h3>
-              <div className="table-responsive">
-                <table className="data-table">
-                  <thead><tr><th>Date</th><th>Bills</th><th>Sales (MRP)</th></tr></thead>
-                  <tbody>
-                    {data.days.map(d => (
-                      <tr key={d.date}>
-                        <td className="font-mono">{d.date}</td>
-                        <td>{d.transactions}</td>
-                        <td className="font-bold">{formatPrice(d.total_sales)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════ TOP PRODUCTS ═══════════ */}
+          {/* ═══════════════════════════════════════════════════════════════
+              TOP PRODUCTS (BEST SELLERS)
+             ═══════════════════════════════════════════════════════════════ */}
           {activeTab === 'top-products' && data.products && (
-            <div className="report-section">
-              <h3>Best Selling Garments</h3>
-              <div className="table-responsive">
-                <table className="data-table">
-                  <thead><tr><th>Garment Name</th><th>Category</th><th>Variant</th><th>Qty Sold</th><th>Orders</th><th>Revenue</th></tr></thead>
-                  <tbody>
-                    {data.products.map((p, i) => (
-                      <tr key={i}>
-                        <td className="font-medium">{p.name}</td>
-                        <td>{p.category}</td>
-                        <td>{p.variant_size || '—'} / {p.variant_color || '—'}</td>
-                        <td className="font-bold">{p.qty_sold}</td>
-                        <td>{p.order_count}</td>
-                        <td className="font-bold text-green-700">{formatPrice(p.revenue)}</td>
+            <div>
+              <TopProductsBarChart products={data.products} />
+
+              <div className="report-section" style={{ marginTop: '20px' }}>
+                <h3>Best Selling Garments Breakdown</h3>
+                <div className="table-responsive">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Garment Name</th>
+                        <th>Category</th>
+                        <th>Variant</th>
+                        <th>Qty Sold</th>
+                        <th>Orders</th>
+                        <th>Revenue</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {data.products.map((p, i) => (
+                        <tr key={i}>
+                          <td style={{ fontWeight: 600 }}>{p.name}</td>
+                          <td><span className="category-badge">{p.category}</span></td>
+                          <td>{p.variant_size || '—'} / {p.variant_color || '—'}</td>
+                          <td style={{ fontWeight: 700 }}>{p.qty_sold} pcs</td>
+                          <td>{p.order_count} bills</td>
+                          <td className="num font-bold" style={{ color: 'var(--accent-secondary)' }}>
+                            {formatPrice(p.revenue)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
 
-          {/* ═══════════ CASHIER SALES ═══════════ */}
-          {activeTab === 'cashier' && data.cashiers && (
-            <div className="report-section">
-              <h3>Sales by Staff Member</h3>
-              <div className="table-responsive">
-                <table className="data-table">
-                  <thead><tr><th>Staff Name</th><th>Employee Code</th><th>Bills Created</th><th>Total Sales</th><th>Avg Bill</th></tr></thead>
-                  <tbody>
-                    {data.cashiers.map(c => (
-                      <tr key={c.employee_code}>
-                        <td className="font-medium">{c.name}</td>
-                        <td className="font-mono">{c.employee_code}</td>
-                        <td>{c.transactions}</td>
-                        <td className="font-bold">{formatPrice(c.total_sales)}</td>
-                        <td>{formatPrice(c.avg_bill)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ═══════════ RENTAL INCOME ═══════════ */}
+          {/* ═══════════════════════════════════════════════════════════════
+              RENTAL INCOME
+             ═══════════════════════════════════════════════════════════════ */}
           {activeTab === 'rental-income' && data.summary && (
             <div>
-              <div className="metric-cards mb-6">
-                <div className="metric-card">
-                  <div className="metric-label">Net Rental Revenue</div>
-                  <div className="metric-val text-emerald-600 font-bold">{formatPrice(data.summary.net_rental_income)}</div>
-                  <div className="text-xs text-gray-500">{data.summary.total_orders} total orders</div>
+              <div className="metric-cards">
+                <div className="metric-card green">
+                  <div className="metric-header">
+                    <span className="metric-label">Net Rental Revenue</span>
+                    <span className="metric-icon">👘</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#10B981' }}>
+                    {formatPrice(data.summary.net_rental_income)}
+                  </div>
+                  <div className="metric-sub">{data.summary.total_orders} total bookings</div>
                 </div>
+
                 <div className="metric-card">
-                  <div className="metric-label">☀️ Per-Day Rental Revenue</div>
-                  <div className="metric-val text-teal-600">{formatPrice(data.summary.per_day_revenue)}</div>
-                  <div className="text-xs text-gray-500">{data.summary.per_day_orders} daily bookings</div>
+                  <div className="metric-header">
+                    <span className="metric-label">☀️ Per-Day Rentals</span>
+                    <span className="metric-icon">📅</span>
+                  </div>
+                  <div className="metric-val" style={{ color: 'var(--accent, #5B9BD5)' }}>
+                    {formatPrice(data.summary.per_day_revenue)}
+                  </div>
+                  <div className="metric-sub">{data.summary.per_day_orders} daily rentals</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">🎉 Per-Event Rental Revenue</div>
-                  <div className="metric-val text-purple-600">{formatPrice(data.summary.per_event_revenue)}</div>
-                  <div className="text-xs text-gray-500">{data.summary.per_event_orders} event bookings</div>
+
+                <div className="metric-card purple">
+                  <div className="metric-header">
+                    <span className="metric-label">🎉 Per-Event Rentals</span>
+                    <span className="metric-icon">👑</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#8B5CF6' }}>
+                    {formatPrice(data.summary.per_event_revenue)}
+                  </div>
+                  <div className="metric-sub">{data.summary.per_event_orders} fixed event rentals</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">Late Fees Collected</div>
-                  <div className="metric-val text-amber-600">{formatPrice(data.summary.total_late_fees)}</div>
-                  <div className="text-xs text-gray-500">Early refunds: {formatPrice(data.summary.total_early_refunds)}</div>
+
+                <div className="metric-card amber">
+                  <div className="metric-header">
+                    <span className="metric-label">Late Fees Collected</span>
+                    <span className="metric-icon">⏰</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#D97706' }}>
+                    {formatPrice(data.summary.total_late_fees)}
+                  </div>
+                  <div className="metric-sub">Overdue return penalties</div>
                 </div>
               </div>
 
@@ -415,20 +583,20 @@ export default function Reports() {
                     <tbody>
                       {(data.orders || []).map(o => (
                         <tr key={o.id}>
-                          <td className="font-mono text-xs font-bold">{o.order_number}</td>
-                          <td className="font-medium">{o.item_name}</td>
+                          <td><code className="sku-code">{o.order_number}</code></td>
+                          <td style={{ fontWeight: 600 }}>{o.item_name}</td>
                           <td>{o.customer_name} ({o.customer_phone})</td>
                           <td>
-                            <span className={`badge ${o.pricing_mode === 'PER_DAY' ? 'badge-info' : 'badge-purple'}`}>
+                            <span className={`category-badge ${o.pricing_mode === 'PER_DAY' ? 'teal' : 'purple'}`}>
                               {o.pricing_mode === 'PER_DAY' ? '☀️ Per Day' : '🎉 Per Event'} (₹{o.applied_rate})
                             </span>
                           </td>
-                          <td className="text-xs">{o.rent_date} to {o.due_date} ({o.billed_days}d)</td>
-                          <td className="font-bold text-emerald-700">{formatPrice(o.final_rent)}</td>
-                          <td className={o.late_fee > 0 ? 'text-red-600 font-bold' : 'text-gray-400'}>
+                          <td style={{ fontSize: '11px' }}>{o.rent_date} to {o.due_date} ({o.billed_days}d)</td>
+                          <td className="num font-bold" style={{ color: '#10B981' }}>{formatPrice(o.final_rent)}</td>
+                          <td className="num" style={{ color: o.late_fee > 0 ? '#DC2626' : 'var(--text-muted)' }}>
                             {o.late_fee > 0 ? `+${formatPrice(o.late_fee)}` : '₹0.00'}
                           </td>
-                          <td className="text-green-700">
+                          <td className="num">
                             {o.status === 'returned' ? formatPrice(o.deposit_refunded) : 'Held'}
                           </td>
                           <td>
@@ -445,21 +613,82 @@ export default function Reports() {
             </div>
           )}
 
-          {/* ═══════════ LOW STOCK ═══════════ */}
+          {/* ═══════════════════════════════════════════════════════════════
+              SLOW MOVERS REPORT
+             ═══════════════════════════════════════════════════════════════ */}
+          {activeTab === 'slow-movers' && (
+            <div className="report-section">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                <h3>🐢 Slow Movers & Inactive Garments (Last 30 Days)</h3>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{data.count} items found with ≤ {data.max_sold} sales</span>
+              </div>
+              <div className="table-responsive">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Garment Name</th>
+                      <th>SKU / Barcode</th>
+                      <th>Category</th>
+                      <th>Variant</th>
+                      <th>Shelf Stock</th>
+                      <th>Selling Price</th>
+                      <th>Cost Price</th>
+                      <th>Qty Sold (30d)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.products || []).map(p => (
+                      <tr key={p.id}>
+                        <td style={{ fontWeight: 600 }}>{p.name}</td>
+                        <td>
+                          <code>{p.sku}</code>
+                          <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'var(--text-muted)' }}>{p.barcode}</div>
+                        </td>
+                        <td><span className="category-badge">{p.category}</span></td>
+                        <td>{p.variant_size || '—'} / {p.variant_color || '—'}</td>
+                        <td style={{ fontWeight: 700 }}>{p.stock_qty} pcs</td>
+                        <td className="num">{formatPrice(p.selling_price)}</td>
+                        <td className="num">{formatPrice(p.cost_price)}</td>
+                        <td>
+                          <span className="badge badge-danger">{p.qty_sold} sold</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════════════
+              LOW STOCK REORDER ALERTS
+             ═══════════════════════════════════════════════════════════════ */}
           {activeTab === 'low-stock' && data.products && (
             <div className="report-section">
               <h3>Low Stock Garments (≤ {data.threshold} remaining)</h3>
               <div className="table-responsive">
                 <table className="data-table">
-                  <thead><tr><th>Garment</th><th>SKU</th><th>Size / Color</th><th>Stock Qty</th><th>Selling Price</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Garment</th>
+                      <th>SKU</th>
+                      <th>Size / Color</th>
+                      <th>Stock Qty</th>
+                      <th>Selling Price</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {data.products.map(p => (
                       <tr key={p.id}>
-                        <td>{p.name}</td>
-                        <td className="font-mono text-xs">{p.sku}</td>
+                        <td style={{ fontWeight: 600 }}>{p.name}</td>
+                        <td><code>{p.sku}</code></td>
                         <td>{p.variant_size || '—'} / {p.variant_color || '—'}</td>
-                        <td><span className={`badge ${p.stock_qty <= 5 ? 'badge-danger' : 'badge-warning'}`}>{p.stock_qty} {p.unit}</span></td>
-                        <td>{formatPrice(p.selling_price)}</td>
+                        <td>
+                          <span className={`badge ${p.stock_qty <= 5 ? 'badge-danger' : 'badge-warning'}`}>
+                            {p.stock_qty} {p.unit}
+                          </span>
+                        </td>
+                        <td className="num">{formatPrice(p.selling_price)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -474,27 +703,49 @@ export default function Reports() {
       {activeTab === 'customer-history' && (
         <div className="report-content">
           {customerHistory?.error && (
-            <div className="empty-state text-red-600">{customerHistory.error}</div>
+            <div className="empty-table" style={{ color: '#DC2626' }}>{customerHistory.error}</div>
           )}
           {customerHistory?.customer && (
             <div>
-              <div className="metric-cards mb-6">
+              <div className="metric-cards">
                 <div className="metric-card">
-                  <div className="metric-label">Customer Name</div>
-                  <div className="metric-val text-lg">{customerHistory.customer.name}</div>
-                  <div className="text-xs text-gray-500">{customerHistory.customer.phone}</div>
+                  <div className="metric-header">
+                    <span className="metric-label">Customer Profile</span>
+                    <span className="metric-icon">👤</span>
+                  </div>
+                  <div className="metric-val">{customerHistory.customer.name}</div>
+                  <div className="metric-sub">{customerHistory.customer.phone}</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">Membership Tier</div>
-                  <div className="metric-val text-purple-600">{customerHistory.customer.membership_tier}</div>
+
+                <div className="metric-card purple">
+                  <div className="metric-header">
+                    <span className="metric-label">Membership Tier</span>
+                    <span className="metric-icon">⭐</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#8B5CF6' }}>
+                    {customerHistory.customer.membership_tier}
+                  </div>
+                  <div className="metric-sub">{customerHistory.customer.loyalty_points || 0} loyalty points</div>
                 </div>
-                <div className="metric-card">
-                  <div className="metric-label">Total Lifetime Spend</div>
-                  <div className="metric-val text-emerald-600">{formatPrice(customerHistory.total_spend)}</div>
+
+                <div className="metric-card green">
+                  <div className="metric-header">
+                    <span className="metric-label">Total Lifetime Spend</span>
+                    <span className="metric-icon">💰</span>
+                  </div>
+                  <div className="metric-val" style={{ color: '#10B981' }}>
+                    {formatPrice(customerHistory.total_spend)}
+                  </div>
+                  <div className="metric-sub">Across all boutique purchases</div>
                 </div>
+
                 <div className="metric-card">
-                  <div className="metric-label">Total Store Visits</div>
+                  <div className="metric-header">
+                    <span className="metric-label">Store Visits</span>
+                    <span className="metric-icon">🏪</span>
+                  </div>
                   <div className="metric-val">{customerHistory.total_visits}</div>
+                  <div className="metric-sub">Completed visits</div>
                 </div>
               </div>
 
@@ -502,14 +753,24 @@ export default function Reports() {
                 <h3>Past Invoices & Bills</h3>
                 <div className="table-responsive">
                   <table className="data-table">
-                    <thead><tr><th>Bill Number</th><th>Date</th><th>Discounts</th><th>Total Paid</th><th>Status</th></tr></thead>
+                    <thead>
+                      <tr>
+                        <th>Bill Number</th>
+                        <th>Date & Time</th>
+                        <th>Discounts</th>
+                        <th>Total Paid</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
                     <tbody>
                       {(customerHistory.bills || []).map(b => (
                         <tr key={b.id}>
-                          <td className="font-mono font-medium">{b.bill_number}</td>
-                          <td>{(b.completed_at || '').slice(0, 10)}</td>
+                          <td><code>{b.bill_number}</code></td>
+                          <td>{(b.completed_at || '').slice(0, 19).replace('T', ' ')}</td>
                           <td>{formatPrice(b.total_discount)}</td>
-                          <td className="font-bold text-green-700">{formatPrice(b.grand_total)}</td>
+                          <td className="num font-bold" style={{ color: 'var(--accent-secondary)' }}>
+                            {formatPrice(b.grand_total)}
+                          </td>
                           <td><span className="badge badge-success">{b.status}</span></td>
                         </tr>
                       ))}

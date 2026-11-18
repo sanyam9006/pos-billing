@@ -6,117 +6,201 @@ const { requireRole } = require('../utils/auth');
 // All report endpoints require supervisor / owner role
 router.use(requireRole('supervisor'));
 
-// ── GET /api/reports/x-report — Current shift summary ──
-router.get('/x-report', (req, res) => {
-  const today = new Date().toISOString().slice(0, 10);
-
+/**
+ * Helper to fetch complete shift/day reporting data:
+ * - Sales and discount metrics
+ * - Payment mode breakdown
+ * - Top selling products
+ * - Hourly breakdown for peak hour chart
+ * - Chronological itemized sales timeline ("when what was sold")
+ */
+function getShiftReportData(dateStr) {
   const summary = db.prepare(`
     SELECT
       COUNT(*) as total_transactions,
       COALESCE(SUM(grand_total), 0) as total_sales,
       COALESCE(SUM(total_discount), 0) as total_discounts
     FROM transactions
-    WHERE status = 'completed' AND date(completed_at) = ?
-  `).get(today);
+    WHERE status = 'completed'
+      AND (date(completed_at) = ? OR date(completed_at, '+5 hours', '+30 minutes') = ?)
+  `).get(dateStr, dateStr);
 
   const byMethod = db.prepare(`
     SELECT p.method, COUNT(*) as count, COALESCE(SUM(p.amount), 0) as total
     FROM payments p
     JOIN transactions t ON p.txn_id = t.id
-    WHERE t.status = 'completed' AND date(t.completed_at) = ?
+    WHERE t.status = 'completed'
+      AND (date(t.completed_at) = ? OR date(t.completed_at, '+5 hours', '+30 minutes') = ?)
     GROUP BY p.method
-  `).all(today);
+  `).all(dateStr, dateStr);
 
   const topProducts = db.prepare(`
-    SELECT p.name, p.variant_size, p.variant_color, SUM(ti.quantity) as qty_sold, SUM(ti.line_total) as revenue
+    SELECT p.name, p.sku, p.variant_size, p.variant_color, p.category,
+      SUM(ti.quantity) as qty_sold,
+      SUM(ti.line_total) as revenue
     FROM transaction_items ti
     JOIN products p ON ti.product_id = p.id
     JOIN transactions t ON ti.txn_id = t.id
-    WHERE t.status = 'completed' AND date(t.completed_at) = ? AND ti.is_return = 0
+    WHERE t.status = 'completed'
+      AND (date(t.completed_at) = ? OR date(t.completed_at, '+5 hours', '+30 minutes') = ?)
+      AND ti.is_return = 0
     GROUP BY ti.product_id
-    ORDER BY qty_sold DESC
-    LIMIT 5
-  `).all(today);
+    ORDER BY revenue DESC
+    LIMIT 10
+  `).all(dateStr, dateStr);
+
+  // Hourly sales distribution (IST hours 0-23)
+  const hourly = db.prepare(`
+    SELECT
+      CAST(strftime('%H', t.completed_at, '+5 hours', '+30 minutes') AS INTEGER) as hour,
+      COUNT(*) as count,
+      COALESCE(SUM(t.grand_total), 0) as total_sales,
+      COALESCE(SUM((
+        SELECT SUM(quantity) FROM transaction_items WHERE txn_id = t.id AND is_return = 0
+      )), 0) as items_sold
+    FROM transactions t
+    WHERE t.status = 'completed'
+      AND (date(t.completed_at) = ? OR date(t.completed_at, '+5 hours', '+30 minutes') = ?)
+    GROUP BY hour
+    ORDER BY hour ASC
+  `).all(dateStr, dateStr);
+
+  // Chronological itemized sales timeline ("when what was sold")
+  const txns = db.prepare(`
+    SELECT
+      t.id,
+      t.bill_number,
+      t.completed_at,
+      strftime('%Y-%m-%d %H:%M:%S', t.completed_at, '+5 hours', '+30 minutes') as ist_completed_at,
+      t.grand_total,
+      t.total_discount,
+      t.status,
+      t.transaction_type,
+      t.exchange_for_bill,
+      t.discount_reason,
+      c.name as cashier_name,
+      c.employee_code as cashier_code,
+      cust.name as customer_name,
+      cust.phone as customer_phone
+    FROM transactions t
+    LEFT JOIN cashiers c ON t.cashier_id = c.id
+    LEFT JOIN customers cust ON t.customer_id = cust.id
+    WHERE t.status = 'completed'
+      AND (date(t.completed_at) = ? OR date(t.completed_at, '+5 hours', '+30 minutes') = ?)
+    ORDER BY t.completed_at DESC, t.id DESC
+  `).all(dateStr, dateStr);
+
+  const getItems = db.prepare(`
+    SELECT
+      ti.id,
+      ti.quantity,
+      ti.unit_price,
+      ti.line_total,
+      ti.is_return,
+      p.name,
+      p.sku,
+      p.barcode,
+      p.category,
+      p.variant_size,
+      p.variant_color
+    FROM transaction_items ti
+    LEFT JOIN products p ON ti.product_id = p.id
+    WHERE ti.txn_id = ?
+  `);
+
+  const getPayments = db.prepare(`
+    SELECT method, amount, tendered, change_amount FROM payments WHERE txn_id = ?
+  `);
+
+  const salesTimeline = txns.map(t => ({
+    ...t,
+    items: getItems.all(t.id),
+    payments: getPayments.all(t.id)
+  }));
 
   const refundTotal = db.prepare(`
     SELECT COUNT(*) as count, COALESCE(SUM(refund_amount), 0) as total
-    FROM refunds WHERE date(created_at) = ?
-  `).get(today);
+    FROM refunds
+    WHERE date(created_at) = ? OR date(created_at, '+5 hours', '+30 minutes') = ?
+  `).get(dateStr, dateStr);
+
+  return {
+    summary,
+    byMethod,
+    topProducts,
+    hourly,
+    salesTimeline,
+    refundTotal
+  };
+}
+
+// ── GET /api/reports/x-report — Current shift summary ──
+router.get('/x-report', (req, res) => {
+  // Support today in IST (UTC+5:30) and UTC
+  const now = new Date();
+  const istDateStr = new Date(now.getTime() + 5.5 * 3600 * 1000).toISOString().slice(0, 10);
+  const utcDateStr = now.toISOString().slice(0, 10);
+
+  let shift = getShiftReportData(istDateStr);
+  let effectiveDate = istDateStr;
+
+  // Fallback to UTC date if no transactions found under IST date yet
+  if (shift.summary.total_transactions === 0 && istDateStr !== utcDateStr) {
+    const utcShift = getShiftReportData(utcDateStr);
+    if (utcShift.summary.total_transactions > 0) {
+      shift = utcShift;
+      effectiveDate = utcDateStr;
+    }
+  }
 
   res.json({
     report_type: 'X Report',
-    date: today,
+    date: effectiveDate,
     generated_at: new Date().toISOString(),
-    ...summary,
-    payment_breakdown: byMethod,
-    top_products: topProducts,
-    refunds: refundTotal
+    ...shift.summary,
+    payment_breakdown: shift.byMethod,
+    top_products: shift.topProducts,
+    hourly_sales: shift.hourly,
+    sales_timeline: shift.salesTimeline,
+    refunds: shift.refundTotal
   });
 });
 
 // ── GET /api/reports/z-report?date= — End-of-day summary ──
 router.get('/z-report', (req, res) => {
   const date = req.query.date || new Date().toISOString().slice(0, 10);
-
-  const summary = db.prepare(`
-    SELECT
-      COUNT(*) as total_transactions,
-      COALESCE(SUM(grand_total), 0) as total_sales,
-      COALESCE(SUM(total_discount), 0) as total_discounts
-    FROM transactions
-    WHERE status = 'completed' AND date(completed_at) = ?
-  `).get(date);
-
-  const byMethod = db.prepare(`
-    SELECT p.method, COUNT(*) as count, COALESCE(SUM(p.amount), 0) as total
-    FROM payments p
-    JOIN transactions t ON p.txn_id = t.id
-    WHERE t.status = 'completed' AND date(t.completed_at) = ?
-    GROUP BY p.method
-  `).all(date);
+  const shift = getShiftReportData(date);
 
   const byCashier = db.prepare(`
     SELECT c.name, c.employee_code, COUNT(*) as transactions,
       COALESCE(SUM(t.grand_total), 0) as total_sales
     FROM transactions t
     JOIN cashiers c ON t.cashier_id = c.id
-    WHERE t.status = 'completed' AND date(t.completed_at) = ?
+    WHERE t.status = 'completed'
+      AND (date(t.completed_at) = ? OR date(t.completed_at, '+5 hours', '+30 minutes') = ?)
     GROUP BY t.cashier_id
     ORDER BY total_sales DESC
-  `).all(date);
-
-  const topProducts = db.prepare(`
-    SELECT p.name, p.sku, p.variant_size, p.variant_color, SUM(ti.quantity) as qty_sold, SUM(ti.line_total) as revenue
-    FROM transaction_items ti
-    JOIN products p ON ti.product_id = p.id
-    JOIN transactions t ON ti.txn_id = t.id
-    WHERE t.status = 'completed' AND date(t.completed_at) = ? AND ti.is_return = 0
-    GROUP BY ti.product_id
-    ORDER BY revenue DESC
-    LIMIT 10
-  `).all(date);
-
-  const refundTotal = db.prepare(`
-    SELECT COUNT(*) as count, COALESCE(SUM(refund_amount), 0) as total
-    FROM refunds WHERE date(created_at) = ?
-  `).get(date);
+  `).all(date, date);
 
   const voidedCount = db.prepare(`
     SELECT COUNT(*) as count FROM transactions
-    WHERE status = 'voided' AND date(created_at) = ?
-  `).get(date);
+    WHERE status = 'voided'
+      AND (date(created_at) = ? OR date(created_at, '+5 hours', '+30 minutes') = ?)
+  `).get(date, date);
 
   res.json({
     report_type: 'Z Report',
     date,
     generated_at: new Date().toISOString(),
-    ...summary,
-    net_sales: Math.round((summary.total_sales - (refundTotal?.total || 0)) * 100) / 100,
-    payment_breakdown: byMethod,
+    ...shift.summary,
+    net_sales: Math.round((shift.summary.total_sales - (shift.refundTotal?.total || 0)) * 100) / 100,
+    payment_breakdown: shift.byMethod,
     cashier_breakdown: byCashier,
-    top_products: topProducts,
-    refunds: refundTotal,
-    voided_transactions: voidedCount.count
+    top_products: shift.topProducts,
+    hourly_sales: shift.hourly,
+    sales_timeline: shift.salesTimeline,
+    refunds: shift.refundTotal,
+    voided_transactions: voidedCount?.count || 0
   });
 });
 
@@ -126,16 +210,32 @@ router.get('/daily-sales', (req, res) => {
   const to = req.query.to || new Date().toISOString().slice(0, 10);
 
   const sales = db.prepare(`
-    SELECT date(completed_at) as date,
+    SELECT
+      COALESCE(date(completed_at, '+5 hours', '+30 minutes'), date(completed_at)) as date,
       COUNT(*) as transactions,
       COALESCE(SUM(grand_total), 0) as total_sales
     FROM transactions
-    WHERE status = 'completed' AND date(completed_at) BETWEEN ? AND ?
-    GROUP BY date(completed_at)
+    WHERE status = 'completed'
+      AND (
+        date(completed_at, '+5 hours', '+30 minutes') BETWEEN ? AND ?
+        OR date(completed_at) BETWEEN ? AND ?
+      )
+    GROUP BY date
     ORDER BY date ASC
-  `).all(from, to);
+  `).all(from, to, from, to);
 
   res.json({ from, to, days: sales });
+});
+
+// ── GET /api/reports/day-transactions?date= — Detailed sales for a single day ──
+router.get('/day-transactions', (req, res) => {
+  const date = req.query.date || new Date().toISOString().slice(0, 10);
+  const shift = getShiftReportData(date);
+  res.json({
+    date,
+    ...shift.summary,
+    sales_timeline: shift.salesTimeline
+  });
 });
 
 // ── GET /api/reports/top-products?limit=10&from=&to= ──
