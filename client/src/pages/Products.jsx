@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice, getStoreConfig } from '../utils/api'
-import { BarcodeSvg, LABEL_SIZES, generateTagPrintHtml } from '../utils/barcode'
+import { BarcodeSvg, LABEL_SIZES, generateTagPrintHtml, isValidEan13 } from '../utils/barcode'
 import ScanPromptModal from '../components/ScanPromptModal'
 
 export default function Products({ cashier }) {
@@ -261,7 +261,9 @@ export default function Products({ cashier }) {
 function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
   const [baseName, setBaseName] = useState('')
   const [baseSku, setBaseSku] = useState('')
-  const [barcodePrefix, setBarcodePrefix] = useState(String(Math.floor(100000 + Math.random() * 900000)))
+  const [allocatedBarcodes, setAllocatedBarcodes] = useState([])
+  const [allocating, setAllocating] = useState(false)
+  const [scanSample, setScanSample] = useState('')
   const [category, setCategory] = useState('')
   const [mrp, setMrp] = useState('')
   const [sellingPrice, setSellingPrice] = useState('')
@@ -303,12 +305,12 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
 
   // Calculate combinations
   const variants = []
-  let seq = 1
+  let idx = 0
   for (const color of selectedColors) {
     for (const size of selectedSizes) {
       const colorCode = color.slice(0, 3).toUpperCase()
       const sku = `${baseSku ? baseSku.trim().toUpperCase() : 'SKU'}-${colorCode}-${size}`
-      const barcode = `${barcodePrefix}${String(seq).padStart(3, '0')}`
+      const barcode = allocatedBarcodes[idx] || ''
       const name = `${baseName ? baseName.trim() : 'Product'} (${color} - ${size})`
       variants.push({
         sku,
@@ -323,8 +325,32 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
         variant_size: size,
         variant_color: color
       })
-      seq++
+      idx++
     }
+  }
+
+  const handleAllocateBarcodes = async (neededCount = variants.length) => {
+    if (!neededCount || neededCount <= 0) return []
+    setAllocating(true)
+    try {
+      const res = await authFetch('/api/barcodes/batch', {
+        method: 'POST',
+        body: JSON.stringify({ count: neededCount })
+      })
+      const data = await res.json()
+      if (res.ok && Array.isArray(data.barcodes)) {
+        setAllocatedBarcodes(data.barcodes)
+        notify(`Allocated ${data.barcodes.length} unique sequential EAN-13 barcodes!`)
+        return data.barcodes
+      } else {
+        notify(data.error || 'Failed to allocate barcodes', 'error')
+      }
+    } catch {
+      notify('Server error allocating barcodes', 'error')
+    } finally {
+      setAllocating(false)
+    }
+    return []
   }
 
   const handleGenerate = async () => {
@@ -339,14 +365,29 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
 
     setGenerating(true)
     try {
+      let finalBarcodes = allocatedBarcodes
+      if (!finalBarcodes || finalBarcodes.length !== variants.length) {
+        finalBarcodes = await handleAllocateBarcodes(variants.length)
+        if (!finalBarcodes || finalBarcodes.length !== variants.length) {
+          notify('Failed to allocate unique barcodes for all variants', 'error')
+          setGenerating(false)
+          return
+        }
+      }
+
+      const productsToCreate = variants.map((v, i) => ({
+        ...v,
+        barcode: finalBarcodes[i]
+      }))
+
       const res = await authFetch('/api/products/batch', {
         method: 'POST',
-        body: JSON.stringify({ products: variants })
+        body: JSON.stringify({ products: productsToCreate })
       })
       const data = await res.json()
       if (res.ok) {
-        notify(`🎉 Created ${variants.length} product variants successfully!`)
-        onSuccess(variants)
+        notify(`🎉 Created ${productsToCreate.length} product variants successfully with unique EAN-13 barcodes!`)
+        onSuccess(productsToCreate)
       } else {
         notify(data.error || 'Failed to create variants', 'error')
       }
@@ -373,19 +414,34 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
             <label>Base SKU Prefix *</label>
             <input placeholder="e.g. LEK" value={baseSku} onChange={e => setBaseSku(e.target.value.toUpperCase())} />
           </div>
-          <div className="form-group" style={{ flex: 1 }}>
-            <label>Barcode Prefix (or Scan)</label>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <input placeholder="e.g. 890123" value={barcodePrefix} onChange={e => setBarcodePrefix(e.target.value)} />
+          <div className="form-group" style={{ flex: 1.5 }}>
+            <label>EAN-13 Barcodes ({variants.length} needed)</label>
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button
+                type="button"
+                className="btn-primary btn-sm"
+                style={{ flex: 1, whiteSpace: 'nowrap', padding: '7px 10px', fontSize: '12px' }}
+                title="Allocate sequential unique EAN-13 barcodes from counter"
+                onClick={() => handleAllocateBarcodes(variants.length)}
+                disabled={allocating || variants.length === 0}
+              >
+                {allocating ? '⏳ Allocating...' : `⚡ Generate ${variants.length} Barcodes`}
+              </button>
               <button
                 type="button"
                 className="icon-btn"
-                title="Scan sample barcode prefix"
+                title="Camera scanner for existing garment barcode"
+                aria-label="Camera scanner"
                 onClick={() => setShowScanner(true)}
               >
                 📷
               </button>
             </div>
+            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+              {allocatedBarcodes.length === variants.length && variants.length > 0
+                ? `✅ ${allocatedBarcodes.length} unique barcodes ready`
+                : scanSample ? `Scanned sample: ${scanSample}` : 'Allocated sequentially from in-store counter'}
+            </span>
           </div>
         </div>
 
@@ -480,7 +536,15 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
                     <tr key={i}>
                       <td><strong>{v.name}</strong></td>
                       <td><code>{v.sku}</code></td>
-                      <td><code>{v.barcode}</code></td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>
+                          {allocatedBarcodes[i] || (
+                            <span style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '12px' }}>
+                              ⚡ Auto EAN-13 on create
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td>{v.variant_color}</td>
                       <td><span className="variant-tag size">{v.variant_size}</span></td>
                       <td className="num">{v.stock_qty}</td>
@@ -507,11 +571,10 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
 
       {showScanner && (
         <ScanPromptModal
-          title="Scan Barcode for Matrix Prefix"
+          title="Scan Sample Garment Barcode"
           onScan={(scanned) => {
-            const prefix = scanned.length > 6 ? scanned.slice(0, 6) : scanned
-            setBarcodePrefix(prefix)
-            notify(`Set barcode prefix: ${prefix}`)
+            setScanSample(scanned)
+            notify(`Scanned sample barcode: ${scanned}`)
           }}
           onClose={() => setShowScanner(false)}
         />
@@ -749,12 +812,12 @@ function BulkBarcodePrintModal({ products, onClose }) {
 // ═══════════════════════════════════════════════
 // PRODUCT FORM MODAL (Supervisor Barcode Editing & Scan Prompt)
 // ═══════════════════════════════════════════════
-function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
+export function ProductFormModal({ product, initialBarcode = '', cashier, onSave, onClose, notify }) {
   const isEdit = !!product
   const isSupervisor = cashier?.role === 'supervisor'
   const [form, setForm] = useState({
     sku: product?.sku || '',
-    barcode: product?.barcode || '',
+    barcode: initialBarcode || product?.barcode || '',
     name: product?.name || '',
     category: product?.category || 'Kurtis',
     mrp: product?.mrp || '',
@@ -766,7 +829,25 @@ function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
     unit: product?.unit || 'pcs'
   })
   const [saving, setSaving] = useState(false)
+  const [generatingBarcode, setGeneratingBarcode] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
+
+  const generateBarcode = async () => {
+    setGeneratingBarcode(true)
+    try {
+      const res = await authFetch('/api/barcodes/next', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.barcode) {
+        update('barcode', data.barcode)
+        notify(`Generated unique EAN-13 barcode: ${data.barcode}`)
+      } else {
+        notify(data.error || 'Failed to generate barcode', 'error')
+      }
+    } catch {
+      notify('Failed to generate barcode', 'error')
+    }
+    setGeneratingBarcode(false)
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -784,11 +865,11 @@ function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
           stock_qty: parseInt(form.stock_qty)
         })
       })
+      const data = await res.json()
       if (res.ok) {
         notify(isEdit ? 'Product updated successfully' : 'Product created successfully')
-        onSave()
+        onSave(data)
       } else {
-        const data = await res.json()
         notify(data.error || 'Failed to save product', 'error')
       }
     } catch {
@@ -801,6 +882,9 @@ function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
 
   // Barcode can be edited on new products, or by supervisors on existing products
   const canEditBarcode = !isEdit || isSupervisor
+
+  const is13Digits = form.barcode && form.barcode.trim().length === 13 && /^\d{13}$/.test(form.barcode.trim())
+  const hasBadCheckDigit = is13Digits && !isValidEan13(form.barcode.trim())
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -815,11 +899,15 @@ function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
             <div className="form-group">
               <label>
                 Barcode * {isEdit && isSupervisor && <span style={{ fontSize: '11px', color: '#16a34a' }}>(Supervisor editable)</span>}
+                {isEdit && !isSupervisor && <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(Supervisor required to edit)</span>}
               </label>
               <div style={{ display: 'flex', gap: '6px' }}>
                 <input
                   value={form.barcode}
                   onChange={e => update('barcode', e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.preventDefault()
+                  }}
                   required
                   disabled={!canEditBarcode}
                   style={{ fontFamily: 'monospace' }}
@@ -828,14 +916,32 @@ function ProductFormModal({ product, cashier, onSave, onClose, notify }) {
                 {canEditBarcode && (
                   <button
                     type="button"
+                    className="btn-primary btn-sm"
+                    style={{ whiteSpace: 'nowrap', padding: '6px 10px', fontSize: '12px' }}
+                    title="Generate unique sequential EAN-13 barcode"
+                    onClick={generateBarcode}
+                    disabled={generatingBarcode}
+                  >
+                    {generatingBarcode ? '⏳' : '⚡ Generate'}
+                  </button>
+                )}
+                {canEditBarcode && (
+                  <button
+                    type="button"
                     className="icon-btn"
-                    title="Scan with barcode gun"
+                    title="Scan barcode with camera"
+                    aria-label="Scan barcode with camera"
                     onClick={() => setShowScanner(true)}
                   >
                     📷
                   </button>
                 )}
               </div>
+              {hasBadCheckDigit && (
+                <div style={{ fontSize: '11px', color: '#b45309', background: '#fef3c7', padding: '4px 8px', borderRadius: '4px', marginTop: '4px' }}>
+                  ⚠️ Warning: Invalid EAN-13 check digit. Standard scanners might have difficulty reading this code.
+                </div>
+              )}
             </div>
           </div>
           <div className="form-group"><label>Name *</label><input value={form.name} onChange={e => update('name', e.target.value)} required /></div>

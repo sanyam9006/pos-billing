@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { authFetch, API, formatPrice } from '../utils/api'
 import { STORE_LOGO_BASE64 } from '../utils/logo'
 import { formatDateTime, formatDate, formatTime } from '../utils/date'
+import { ProductFormModal } from './Products'
 
 export default function Billing({ cashier, onLogout }) {
   const [txn, setTxn] = useState(null)
@@ -19,6 +20,8 @@ export default function Billing({ cashier, onLogout }) {
   const [showCoupon, setShowCoupon] = useState(false)
   const [showReceipt, setShowReceipt] = useState(null)
   const [showHeld, setShowHeld] = useState(false)
+  const [unknownBarcode, setUnknownBarcode] = useState(null)
+  const [showAddProductModal, setShowAddProductModal] = useState(false)
 
   const scanRef = useRef(null)
 
@@ -77,18 +80,21 @@ export default function Billing({ cashier, onLogout }) {
   }
 
   const handleScan = async (e) => {
-    e.preventDefault()
+    if (e && e.preventDefault) e.preventDefault()
     const input = scanInput.trim()
     if (!input || !txn) return
 
+    setUnknownBarcode(null)
+
     // Try barcode scan first
     try {
-      let res = await authFetch(`${API}/products/scan/${input}`)
+      let res = await authFetch(`${API}/products/scan/${encodeURIComponent(input)}`)
       if (res.ok) {
         const product = await res.json()
         await addItemToCart(product)
         setScanInput('')
         setSearchResults([])
+        setTimeout(() => scanRef.current?.focus(), 50)
         return
       }
 
@@ -100,13 +106,23 @@ export default function Billing({ cashier, onLogout }) {
           await addItemToCart(results[0])
           setScanInput('')
           setSearchResults([])
+          setTimeout(() => scanRef.current?.focus(), 50)
+          return
         } else if (results.length > 1) {
           setSearchResults(results)
-        } else {
-          notify('Item not found — try manual entry', 'error')
+          setTimeout(() => scanRef.current?.focus(), 50)
+          return
         }
       }
-    } catch { notify('Scan failed', 'error') }
+
+      // Barcode / item not found
+      setUnknownBarcode(input)
+      notify(`Item with barcode "${input}" not found in inventory`, 'error')
+      setTimeout(() => scanRef.current?.focus(), 50)
+    } catch {
+      notify('Scan failed', 'error')
+      setTimeout(() => scanRef.current?.focus(), 50)
+    }
   }
 
   const handleSearchInput = async (val) => {
@@ -419,6 +435,50 @@ export default function Billing({ cashier, onLogout }) {
             <button className="search-btn" onClick={handleScan}>Add ⏎</button>
           </div>
 
+          {/* Unknown Barcode Notice & Action */}
+          {unknownBarcode && (
+            <div
+              className="barcode-not-found-banner"
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                borderRadius: 'var(--radius)',
+                padding: '10px 14px',
+                margin: '8px 0',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexWrap: 'wrap'
+              }}
+            >
+              <div style={{ color: '#991b1b', fontSize: '13px' }}>
+                🔍 Item with barcode <strong style={{ fontFamily: 'monospace' }}>{unknownBarcode}</strong> not found.
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="btn-primary btn-sm"
+                  style={{ fontSize: '12px', padding: '5px 10px' }}
+                  onClick={() => setShowAddProductModal(true)}
+                >
+                  ➕ Add as New Product
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  style={{ fontSize: '12px', padding: '5px 8px' }}
+                  onClick={() => {
+                    setUnknownBarcode(null)
+                    scanRef.current?.focus()
+                  }}
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Cart list */}
           <div className="cart-list">
             {items.length === 0 ? (
@@ -597,6 +657,30 @@ export default function Billing({ cashier, onLogout }) {
         <HeldBillsModal
           onRecall={recallBill}
           onClose={() => setShowHeld(false)}
+        />
+      )}
+
+      {/* Add Product Modal for Pre-filled Unknown Barcode */}
+      {showAddProductModal && (
+        <ProductFormModal
+          product={null}
+          initialBarcode={unknownBarcode}
+          cashier={cashier}
+          onSave={async (newProduct) => {
+            setShowAddProductModal(false)
+            setUnknownBarcode(null)
+            setScanInput('')
+            if (newProduct && newProduct.id) {
+              await addItemToCart(newProduct)
+              notify(`Added "${newProduct.name}" to bill!`)
+            }
+            setTimeout(() => scanRef.current?.focus(), 50)
+          }}
+          onClose={() => {
+            setShowAddProductModal(false)
+            setTimeout(() => scanRef.current?.focus(), 50)
+          }}
+          notify={notify}
         />
       )}
     </div>

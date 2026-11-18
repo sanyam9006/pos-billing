@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { authFetch, formatPrice, getStoreConfig } from '../utils/api'
-import { BarcodeSvg } from '../utils/barcode'
+import { BarcodeSvg, isValidEan13 } from '../utils/barcode'
 import { STORE_LOGO_BASE64 } from '../utils/logo'
 import { formatDateTime, formatDate } from '../utils/date'
 import ScanPromptModal from '../components/ScanPromptModal'
@@ -832,9 +832,30 @@ function RentalItemFormModal({ item, onSuccess, onClose, notify }) {
     notes: item?.notes || ''
   })
   const [saving, setSaving] = useState(false)
+  const [generatingBarcode, setGeneratingBarcode] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
 
   const update = (key, val) => setForm(prev => ({ ...prev, [key]: val }))
+
+  const generateBarcode = async () => {
+    setGeneratingBarcode(true)
+    try {
+      const res = await authFetch('/api/barcodes/next', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok && data.barcode) {
+        update('barcode', data.barcode)
+        notify(`Generated unique EAN-13 barcode: ${data.barcode}`)
+      } else {
+        notify(data.error || 'Failed to generate barcode', 'error')
+      }
+    } catch {
+      notify('Failed to generate barcode', 'error')
+    }
+    setGeneratingBarcode(false)
+  }
+
+  const is13Digits = form.barcode && form.barcode.trim().length === 13 && /^\d{13}$/.test(form.barcode.trim())
+  const hasBadCheckDigit = is13Digits && !isValidEan13(form.barcode.trim())
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -890,19 +911,38 @@ function RentalItemFormModal({ item, onSuccess, onClose, notify }) {
                 <input
                   value={form.barcode}
                   onChange={e => update('barcode', e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.preventDefault()
+                  }}
                   required
                   style={{ fontFamily: 'monospace' }}
                   placeholder="Scan or type barcode"
                 />
                 <button
                   type="button"
+                  className="btn-primary btn-sm"
+                  style={{ whiteSpace: 'nowrap', padding: '6px 10px', fontSize: '12px' }}
+                  title="Generate unique sequential EAN-13 barcode"
+                  onClick={generateBarcode}
+                  disabled={generatingBarcode}
+                >
+                  {generatingBarcode ? '⏳' : '⚡ Generate'}
+                </button>
+                <button
+                  type="button"
                   className="icon-btn"
-                  title="Scan with barcode gun"
+                  title="Scan barcode with camera"
+                  aria-label="Scan barcode with camera"
                   onClick={() => setShowScanner(true)}
                 >
                   📷
                 </button>
               </div>
+              {hasBadCheckDigit && (
+                <div style={{ fontSize: '11px', color: '#b45309', background: '#fef3c7', padding: '4px 8px', borderRadius: '4px', marginTop: '4px' }}>
+                  ⚠️ Warning: Invalid EAN-13 check digit. Standard scanners might have difficulty reading this code.
+                </div>
+              )}
             </div>
           </div>
 
