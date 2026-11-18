@@ -12,7 +12,7 @@
     "setup": "npm install && cd client && npm install && cd .. && npm run seed",
     "lint": "eslint server/",
     "format": "prettier --write \"server/**/*.js\" \"client/src/**/*.{js,jsx,css}\"",
-    "test": "jest --forceExit --detectOpenHandles"
+    "test": "jest --forceExit --detectOpenHandles --runInBand"
   },
   "dependencies": {
     "@xmldom/xmldom": "^0.9.12",
