@@ -337,7 +337,12 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
         method: 'POST',
         body: JSON.stringify({ count: neededCount })
       })
-      const data = await res.json()
+      let data = {}
+      try {
+        data = await res.json()
+      } catch {
+        data = { error: 'Server returned unexpected response' }
+      }
       if (res.ok && Array.isArray(data.barcodes)) {
         setAllocatedBarcodes(data.barcodes)
         notify(`Allocated ${data.barcodes.length} unique sequential EAN-13 barcodes!`)
@@ -345,8 +350,9 @@ function MatrixGeneratorModal({ onSuccess, onClose, notify }) {
       } else {
         notify(data.error || 'Failed to allocate barcodes', 'error')
       }
-    } catch {
-      notify('Server error allocating barcodes', 'error')
+    } catch (err) {
+      console.error('Barcode allocation error:', err)
+      notify(err.message || 'Server error allocating barcodes', 'error')
     } finally {
       setAllocating(false)
     }
