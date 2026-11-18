@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../db');
 const { requireRole } = require('../utils/auth');
 const { logAudit } = require('../utils/audit');
+const { validateBarcode } = require('../utils/barcode');
 
 function sanitizeProduct(p) {
   if (!p) return p;
@@ -60,7 +61,6 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
   }
 
   const checkSku = db.prepare('SELECT id FROM products WHERE sku = ?');
-  const checkBarcode = db.prepare('SELECT id FROM products WHERE barcode = ?');
 
   const seenSkus = new Set();
   const seenBarcodes = new Set();
@@ -69,14 +69,27 @@ router.post('/batch', requireRole('supervisor'), (req, res) => {
     if (!p.sku || !p.barcode || !p.name || !p.category || p.mrp === undefined || p.mrp === null || p.selling_price === undefined || p.selling_price === null) {
       return res.status(400).json({ error: `Missing required fields in item: ${p.sku || 'unnamed'}` });
     }
-    if (seenSkus.has(p.sku) || checkSku.get(p.sku)) {
-      return res.status(409).json({ error: `Duplicate SKU: ${p.sku}` });
+    const cleanSku = String(p.sku).trim().toUpperCase();
+    const cleanBarcode = String(p.barcode).trim();
+
+    if (!cleanBarcode) {
+      return res.status(400).json({ error: `Barcode cannot be empty or whitespace in variant ${cleanSku}` });
     }
-    if (seenBarcodes.has(p.barcode) || checkBarcode.get(p.barcode)) {
-      return res.status(409).json({ error: `Duplicate Barcode: ${p.barcode}` });
+
+    if (seenSkus.has(cleanSku) || checkSku.get(cleanSku)) {
+      return res.status(409).json({ error: `Duplicate SKU: ${cleanSku}` });
     }
-    seenSkus.add(p.sku);
-    seenBarcodes.add(p.barcode);
+    if (seenBarcodes.has(cleanBarcode)) {
+      return res.status(409).json({ error: `Duplicate Barcode within batch: ${cleanBarcode}` });
+    }
+
+    const valRes = validateBarcode(db, cleanBarcode);
+    if (!valRes.valid) {
+      return res.status(409).json({ error: valRes.error });
+    }
+
+    seenSkus.add(cleanSku);
+    seenBarcodes.add(cleanBarcode);
   }
 
   const insertProduct = db.prepare(`
@@ -132,11 +145,16 @@ router.post('/', requireRole('supervisor'), (req, res) => {
     return res.status(400).json({ error: 'Required fields: sku, barcode, name, category, mrp, selling_price' });
   }
 
-  const existingSku = db.prepare('SELECT id FROM products WHERE sku = ?').get(sku);
-  if (existingSku) return res.status(409).json({ error: `SKU "${sku}" already exists` });
+  const cleanSku = String(sku).trim().toUpperCase();
+  const cleanBarcode = String(barcode).trim();
 
-  const existingBarcode = db.prepare('SELECT id FROM products WHERE barcode = ?').get(barcode);
-  if (existingBarcode) return res.status(409).json({ error: `Barcode "${barcode}" already exists` });
+  const existingSku = db.prepare('SELECT id FROM products WHERE sku = ?').get(cleanSku);
+  if (existingSku) return res.status(409).json({ error: `SKU "${cleanSku}" already exists` });
+
+  const valRes = validateBarcode(db, cleanBarcode);
+  if (!valRes.valid) {
+    return res.status(valRes.isDuplicate ? 409 : 400).json({ error: valRes.error });
+  }
 
   const result = db.prepare(`
     INSERT INTO products (
@@ -144,7 +162,7 @@ router.post('/', requireRole('supervisor'), (req, res) => {
       tax_rate, stock_qty, unit, variant_size, variant_color, cost_price
     ) VALUES (?, ?, ?, ?, ?, ?, NULL, 0, ?, ?, ?, ?, ?)
   `).run(
-    sku, barcode, name, category, mrp, selling_price,
+    cleanSku, cleanBarcode, name.trim(), category.trim(), mrp, selling_price,
     stock_qty, unit,
     variant_size || null, variant_color || null, Number(cost_price) || 0
   );
@@ -157,7 +175,7 @@ router.post('/', requireRole('supervisor'), (req, res) => {
     action: 'create_product',
     entity_type: 'product',
     entity_id: product.id,
-    details: { sku, name, selling_price, mrp }
+    details: { sku: cleanSku, barcode: cleanBarcode, name, selling_price, mrp }
   });
 
   res.status(201).json(sanitizeProduct(product));
@@ -173,14 +191,19 @@ router.put('/:id', requireRole('supervisor'), (req, res) => {
   let barcodeChanged = false;
   let newBarcode = product.barcode;
 
-  if (barcode && barcode.trim() && barcode.trim() !== product.barcode) {
-    const cleanBarcode = barcode.trim();
-    const existing = db.prepare('SELECT id FROM products WHERE barcode = ? AND id != ?').get(cleanBarcode, req.params.id);
-    if (existing) {
-      return res.status(409).json({ error: `Barcode "${cleanBarcode}" is already assigned to another product` });
+  if (barcode !== undefined && barcode !== null) {
+    const cleanBarcode = String(barcode).trim();
+    if (!cleanBarcode) {
+      return res.status(400).json({ error: 'Barcode cannot be empty or whitespace only.' });
     }
-    newBarcode = cleanBarcode;
-    barcodeChanged = true;
+    if (cleanBarcode !== product.barcode) {
+      const valRes = validateBarcode(db, cleanBarcode, { excludeProductId: req.params.id });
+      if (!valRes.valid) {
+        return res.status(valRes.isDuplicate ? 409 : 400).json({ error: valRes.error });
+      }
+      newBarcode = cleanBarcode;
+      barcodeChanged = true;
+    }
   }
 
   db.prepare(`

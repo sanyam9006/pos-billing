@@ -4,6 +4,7 @@ const db = require('../db');
 const { getSetting } = require('../utils/settings');
 const { verifyPin, requireRole } = require('../utils/auth');
 const { logAudit } = require('../utils/audit');
+const { validateBarcode } = require('../utils/barcode');
 
 // ── Helper: generate unique rental order number (RNT-YYYYMM-XXXX) ──
 function generateRentalOrderNumber() {
@@ -97,12 +98,15 @@ router.post('/items', requireRole('supervisor'), (req, res) => {
   const cleanSku = sku.trim().toUpperCase();
   const cleanBarcode = barcode.trim();
 
-  // Check unique SKU and barcode in rental_items
+  // Check unique SKU in rental_items
   const existingSku = db.prepare('SELECT id FROM rental_items WHERE sku = ?').get(cleanSku);
   if (existingSku) return res.status(409).json({ error: `SKU "${cleanSku}" already exists in rental inventory` });
 
-  const existingBarcode = db.prepare('SELECT id FROM rental_items WHERE barcode = ?').get(cleanBarcode);
-  if (existingBarcode) return res.status(409).json({ error: `Barcode "${cleanBarcode}" already assigned to another rental item` });
+  // Validate barcode uniqueness across rental items and products
+  const valRes = validateBarcode(db, cleanBarcode);
+  if (!valRes.valid) {
+    return res.status(valRes.isDuplicate ? 409 : 400).json({ error: valRes.error });
+  }
 
   const result = db.prepare(`
     INSERT INTO rental_items (
@@ -159,14 +163,19 @@ router.put('/items/:id', requireRole('supervisor'), (req, res) => {
   let barcodeChanged = false;
   let newBarcode = item.barcode;
 
-  if (barcode && barcode.trim() && barcode.trim() !== item.barcode) {
-    const cleanBarcode = barcode.trim();
-    const existing = db.prepare('SELECT id FROM rental_items WHERE barcode = ? AND id != ?').get(cleanBarcode, req.params.id);
-    if (existing) {
-      return res.status(409).json({ error: `Barcode "${cleanBarcode}" already assigned to another rental item` });
+  if (barcode !== undefined && barcode !== null) {
+    const cleanBarcode = String(barcode).trim();
+    if (!cleanBarcode) {
+      return res.status(400).json({ error: 'Barcode cannot be empty or whitespace only.' });
     }
-    newBarcode = cleanBarcode;
-    barcodeChanged = true;
+    if (cleanBarcode !== item.barcode) {
+      const valRes = validateBarcode(db, cleanBarcode, { excludeRentalId: req.params.id });
+      if (!valRes.valid) {
+        return res.status(valRes.isDuplicate ? 409 : 400).json({ error: valRes.error });
+      }
+      newBarcode = cleanBarcode;
+      barcodeChanged = true;
+    }
   }
 
   db.prepare(`
