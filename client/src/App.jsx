@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/Layout'
+import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Billing from './pages/Billing'
@@ -42,7 +43,13 @@ function App() {
     localStorage.removeItem(SESSION_KEY)
   }
 
-  if (loading) return null
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg, #FAF7F2)' }}>
+        <div style={{ color: 'var(--text-muted, #7A7168)', fontSize: '14px', fontWeight: 600 }}>Loading POS...</div>
+      </div>
+    )
+  }
 
   if (!cashier) {
     return <Login onLogin={handleLogin} />
@@ -51,27 +58,29 @@ function App() {
   const isSupervisor = cashier.role === 'supervisor'
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<Layout cashier={cashier} onLogout={handleLogout} />}>
-          <Route path="/" element={<Dashboard cashier={cashier} />} />
-          <Route path="/billing" element={<Billing cashier={cashier} onLogout={handleLogout} />} />
-          <Route path="/products" element={<Products cashier={cashier} />} />
-          <Route path="/customers" element={<Customers cashier={cashier} />} />
-          <Route path="/custom-orders" element={<CustomOrders cashier={cashier} />} />
-          <Route path="/rentals" element={<Rentals cashier={cashier} />} />
-          {isSupervisor && (
-            <>
-              <Route path="/reports" element={<Reports cashier={cashier} />} />
-              <Route path="/refunds" element={<Refunds cashier={cashier} />} />
-              <Route path="/purchase-orders" element={<PurchaseOrders cashier={cashier} />} />
-              <Route path="/settings" element={<Settings cashier={cashier} />} />
-            </>
-          )}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<Layout cashier={cashier} onLogout={handleLogout} />}>
+            <Route path="/" element={<Dashboard cashier={cashier} />} />
+            <Route path="/billing" element={<Billing cashier={cashier} onLogout={handleLogout} />} />
+            <Route path="/products" element={<Products cashier={cashier} />} />
+            <Route path="/customers" element={<Customers cashier={cashier} />} />
+            <Route path="/custom-orders" element={<CustomOrders cashier={cashier} />} />
+            <Route path="/rentals" element={<Rentals cashier={cashier} />} />
+            {isSupervisor && (
+              <>
+                <Route path="/reports" element={<Reports cashier={cashier} />} />
+                <Route path="/refunds" element={<Refunds cashier={cashier} />} />
+                <Route path="/purchase-orders" element={<PurchaseOrders cashier={cashier} />} />
+                <Route path="/settings" element={<Settings cashier={cashier} />} />
+              </>
+            )}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 

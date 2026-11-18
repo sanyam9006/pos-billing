@@ -1,9 +1,21 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
 const isTest = process.env.NODE_ENV === 'test';
 const dbFile = isTest ? 'pos.test.db' : 'pos.db';
 const dbPath = process.env.DB_PATH || path.join(__dirname, '..', dbFile);
+
+// For isolated tests, copy initial schema and seed from pos.db if pos.test.db doesn't exist yet
+if (isTest && !process.env.DB_PATH && !fs.existsSync(dbPath)) {
+  const prodDbPath = path.join(__dirname, '..', 'pos.db');
+  if (fs.existsSync(prodDbPath)) {
+    try {
+      fs.copyFileSync(prodDbPath, dbPath);
+    } catch (_) {}
+  }
+}
+
 const db = new Database(dbPath);
 
 // Enable WAL mode for better performance

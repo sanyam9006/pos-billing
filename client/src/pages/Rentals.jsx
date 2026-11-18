@@ -43,6 +43,13 @@ export default function Rentals({ cashier }) {
           setOrders([])
           notify(data?.error || 'Failed to load rental orders', 'error')
         }
+        // Also fetch items count if empty
+        if (items.length === 0) {
+          authFetch('/api/rentals/items')
+            .then(r => r.json())
+            .then(d => { if (Array.isArray(d)) setItems(d) })
+            .catch(() => {})
+        }
       } else {
         let url = '/api/rentals/items'
         if (statusFilter) url += `?status=${statusFilter}`
@@ -53,6 +60,13 @@ export default function Rentals({ cashier }) {
         } else {
           setItems([])
           notify(data?.error || 'Failed to load rental items', 'error')
+        }
+        // Also fetch orders count if empty
+        if (orders.length === 0) {
+          authFetch('/api/rentals/orders')
+            .then(r => r.json())
+            .then(d => { if (Array.isArray(d)) setOrders(d) })
+            .catch(() => {})
         }
       }
     } catch {

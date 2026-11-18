@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { getStoreConfig } from '../utils/api'
+import ErrorBoundary from './ErrorBoundary'
 
 export default function Layout({ cashier, onLogout }) {
   const navigate = useNavigate()
@@ -93,7 +94,9 @@ export default function Layout({ cashier, onLogout }) {
       </nav>
 
       <main className="main-content">
-        <Outlet />
+        <ErrorBoundary>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   )

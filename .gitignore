@@ -5,6 +5,7 @@ client/dist/
 pos.db
 pos.db-wal
 pos.db-shm
+*.test.db*
 backups/
 .env
 .env.local
