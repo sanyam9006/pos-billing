@@ -327,4 +327,8 @@ defaultSettings.forEach(([key, val, desc]) => {
 const runMigration = require('./migrate-remove-gst');
 runMigration(db);
 
+// Safe migration for unique barcode indexes and sequential counter
+const migrateBarcodeIndexes = require('./migrate-barcode-indexes');
+migrateBarcodeIndexes(db);
+
 module.exports = db;
