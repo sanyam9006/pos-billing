@@ -8,10 +8,16 @@ export default function Login({ onLogin }) {
   const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [storeName, setStoreName] = useState('POS System')
+  const [storeName, setStoreName] = useState('House of Sadaya')
+  const [storeLogo, setStoreLogo] = useState('')
 
   useEffect(() => {
-    getStoreConfig().then(c => setStoreName(c.store_name))
+    getStoreConfig().then(c => {
+      if (c) {
+        if (c.store_name) setStoreName(c.store_name)
+        if (c.store_logo) setStoreLogo(c.store_logo)
+      }
+    }).catch(() => {})
   }, [])
 
   const handleSubmit = async (e) => {
@@ -45,9 +51,24 @@ export default function Login({ onLogin }) {
     <div className="login-screen">
       <div className="login-card">
         <div className="login-logo">
-          <span className="icon">🏪</span>
+          {storeLogo ? (
+            <img
+              src={storeLogo}
+              alt="Store Logo"
+              style={{
+                width: 68,
+                height: 68,
+                objectFit: 'contain',
+                borderRadius: '50%',
+                marginBottom: 12,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+              }}
+            />
+          ) : (
+            <span className="icon">👗</span>
+          )}
           <h1>{storeName}</h1>
-          <p>Point of Sale System</p>
+          <p>Boutique Point of Sale</p>
         </div>
 
         {error && <div className="login-error">⚠️ {error}</div>}
@@ -80,10 +101,6 @@ export default function Login({ onLogin }) {
             {loading ? '⏳ Logging in...' : '🔐 Login to POS'}
           </button>
         </form>
-
-        <div className="login-hint">
-          Demo: <code>EMP001</code> / <code>1234</code>
-        </div>
       </div>
     </div>
   )
