@@ -1,53 +1,49 @@
 @echo off
-setlocal
+title House of Sadaya - POS Launcher
+color 0b
 
-:: Indian Boutique POS Launcher for Windows
-:: Auto-detects project directory based on .bat location
+:: Navigate to folder containing this script
 cd /d "%~dp0"
 
-echo ========================================================
-echo   Launching Aura Fashion Boutique POS System...
-echo ========================================================
+echo ================================================================
+echo          HOUSE OF SADAYA - BOUTIQUE POS SYSTEM
+echo ================================================================
+echo.
 
-:: Check Node.js
-where node >nul 2>nul
+node -v >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Node.js is not found in PATH.
-    echo Please install Node.js (v18+) from https://nodejs.org
+    echo [!] Node.js is NOT installed on this laptop!
+    echo.
+    echo Opening https://nodejs.org in your browser right now...
+    start https://nodejs.org
+    echo.
+    echo Please install Node.js (LTS), then restart this file.
+    echo ================================================================
     pause
     exit /b 1
 )
 
-:: Check if backend health endpoint is active
-curl -s http://localhost:3001/api/health >nul 2>nul
-if %errorlevel% neq 0 (
-    echo Starting POS Server and Web Interface...
-    start /min "Aura POS Engine" cmd /c "npm run dev"
-    
-    :: Wait up to 10 seconds for backend to start
-    set count=0
-    :wait_loop
-    timeout /t 1 /nobreak >nul
-    curl -s http://localhost:3001/api/health >nul 2>nul
-    if %errorlevel% equ 0 goto ready
-    set /a count+=1
-    if %count% geq 10 goto ready
-    goto wait_loop
+if not exist "node_modules\" (
+    echo [First-Time Setup] Installing server dependencies...
+    call npm install
 )
 
-:ready
-timeout /t 1 /nobreak >nul
-echo POS System is ready! Opening in your browser...
-
-:: Open Chrome in kiosk/app mode if installed, otherwise default browser
-if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5173
-) else if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5173
-) else if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5173
-) else (
-    start http://localhost:5173
+if not exist "client\node_modules\" (
+    echo [First-Time Setup] Installing client dependencies...
+    cd client
+    call npm install
+    cd ..
 )
 
-exit /b 0
+echo Starting POS Server...
+start "House of Sadaya POS Engine" cmd /k "npm run dev"
+
+timeout /t 5 >nul 2>&1
+start http://localhost:5173
+
+echo.
+echo ================================================================
+echo   POS SYSTEM IS READY at http://localhost:5173
+echo ================================================================
+echo.
+pause

@@ -5,25 +5,36 @@
 
 ## 🚀 Part 1: First-Time Setup on Windows (Takes 3 Minutes)
 
-### Step 1: Install Node.js (Only required once)
-1. Download Node.js from the official website:
-   👉 **https://nodejs.org** *(Select the LTS version recommended for most users)*.
+### Step 1: Install Node.js (Prerequisite — Only required once)
+Before running the POS, Windows needs the Node.js runtime:
+1. Download Node.js from the official site:
+   👉 **https://nodejs.org** *(Click the big green button: **LTS - Recommended for most users**)*.
 2. Run the downloaded installer (`node-v20...msi`).
-3. Click **Next** through all default prompts and click **Finish**.
+3. Click **Next ➔ Next ➔ Next ➔ Finish** (accept all standard defaults).
+
+---
 
 ### Step 2: Extract the Project Folder
-1. Right-click the `HouseOfSadaya-POS.zip` file you received.
-2. Select **Extract All...** and choose where to extract (e.g. your Desktop or `C:\HouseOfSadaya-POS`).
+1. Right-click the `HouseOfSadaya-POS.zip` file on your Desktop.
+2. Select **Extract All...** and click **Extract**.
 
-### Step 3: Start the POS
-1. Open the extracted `HouseOfSadaya-POS` folder.
-2. Double-click **`START-POS.bat`**.
-   - *On the very first launch, it will automatically download necessary dependencies (takes ~1 to 2 minutes).*
-   - *On subsequent daily launches, it starts instantly in 2 seconds.*
-3. Your web browser (Chrome / Edge) will automatically open:
-   👉 **http://localhost:5173**
+---
 
-> 💡 **Tip:** Right-click **`START-POS.bat`** ➔ **Send to** ➔ **Desktop (create shortcut)**. You can rename the shortcut to **"House of Sadaya POS"** and open it with one click every morning!
+### Step 3: Run the POS (`START-POS.bat`)
+1. Open the extracted folder and double-click **`START-POS.bat`**.
+
+#### ⚠️ If Windows shows the "Open File - Security Warning" dialog:
+- Windows shows this for any downloaded script.
+- **Uncheck** *"Always ask before opening this file"*.
+- Click **Run**.
+*(Alternative: Right-click `START-POS.bat` ➔ **Properties** ➔ Check **"Unblock"** at the bottom ➔ Click **OK**).*
+
+2. A blue console window will appear:
+   - On the **very first run**, it will automatically download necessary libraries (takes about 1–2 minutes).
+   - Once ready, it automatically opens your web browser to:
+     👉 **http://localhost:5173**
+
+> 💡 **Everyday Convenience:** Right-click **`START-POS.bat`** ➔ **Send to** ➔ **Desktop (create shortcut)**. Every morning, just double-click that desktop icon to start your store POS!
 
 ---
 
@@ -89,10 +100,4 @@
   - **Profit & Margin**: View gross margin %, revenue vs. garment cost, and highest grossing categories.
 
 ### 7. Stopping the System at Night
-- To safely shut down background services at closing time, simply double-click **`STOP-POS.bat`**.
-
----
-
-## 💾 Backups & Safety
-- Go to **⚙️ Settings** and click **`📦 Backup Database Now`**. It will instantly create a timestamped backup copy of your database.
-- The database is stored in a single standalone file named `pos.db`. Even if you move laptops in the future, copying `pos.db` preserves 100% of your products, sales history, customer records, and staff settings!
+- To safely shut down background services at closing time, simply double-click **`STOP-POS.bat`** or close the terminal window.

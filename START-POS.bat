@@ -1,8 +1,8 @@
 @echo off
-title House of Sadaya - POS Launcher
+title House of Sadaya - POS
 color 0b
 
-:: Navigate to folder containing this batch script
+:: Navigate to folder containing this script
 cd /d "%~dp0"
 
 echo ================================================================
@@ -11,67 +11,60 @@ echo ================================================================
 echo.
 
 :: 1. Check if Node.js is installed
-where node >nul 2>nul
+node -v >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] Node.js is not installed on this laptop!
+    echo [!] Node.js is NOT installed on this laptop!
     echo.
-    echo Please install Node.js (v18 or higher) from:
-    echo https://nodejs.org/
+    echo Opening https://nodejs.org in your browser right now...
+    start https://nodejs.org
     echo.
-    echo After installing, restart this file.
+    echo INSTRUCTIONS:
+    echo  1. On the website, click the big green "LTS (Recommended)" button.
+    echo  2. Install it by clicking "Next" - "Next" - "Finish".
+    echo  3. After installation finishes, double-click START-POS.bat again.
+    echo.
     echo ================================================================
     pause
     exit /b 1
 )
 
-:: 2. First-Time Setup: Check if node_modules exist
+echo [Step 1/3] Node.js is ready:
+node -v
+
+:: 2. Check and install dependencies on first run
 if not exist "node_modules\" (
-    echo [FIRST RUN] Installing backend dependencies... Please wait 1-2 minutes.
+    echo.
+    echo [Step 2/3] First-time setup detected: Installing server packages...
+    echo (This only happens on the first run, takes about 1-2 minutes)
     call npm install
 )
 
 if not exist "client\node_modules\" (
-    echo [FIRST RUN] Installing frontend dependencies... Please wait 1-2 minutes.
+    echo.
+    echo [Step 2/3] Installing client packages...
+    echo (Please wait 1-2 minutes)
     cd client
     call npm install
     cd ..
 )
 
 echo.
-echo [1/2] Starting POS server and billing engine...
+echo [Step 3/3] Starting House of Sadaya POS server...
+start "House of Sadaya POS Engine" cmd /k "npm run dev"
 
-:: 3. Start backend and frontend concurrently
-start /min "House of Sadaya POS Server" cmd /c "npm run dev"
+echo Waiting 5 seconds for POS server to wake up...
+timeout /t 5 >nul 2>&1
 
-echo [2/2] Waiting for server to initialize...
+echo Opening House of Sadaya in your web browser...
+start http://localhost:5173
 
-:: Wait up to 10 seconds for backend to respond
-set count=0
-:wait_loop
-timeout /t 1 /nobreak >nul
-curl -s http://localhost:3001/api/config >nul 2>nul
-if %errorlevel% equ 0 goto ready
-set /a count+=1
-if %count% geq 10 goto ready
-goto wait_loop
-
-:ready
-timeout /t 1 /nobreak >nul
 echo.
 echo ================================================================
-echo   POS SYSTEM IS READY! Opening House of Sadaya in your browser...
-echo   URL: http://localhost:5173
+echo   SUCCESS! HOUSE OF SADAYA POS IS NOW RUNNING!
+echo   Open in browser: http://localhost:5173
+echo.
+echo   * Keep the "House of Sadaya POS Engine" window open while using the POS.
+echo   * At the end of the day, you can close this window to stop the POS.
 echo ================================================================
-
-:: Open Chrome in kiosk/app mode if installed, otherwise default browser
-if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5173
-) else if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" (
-    start "" "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" --app=http://localhost:5173
-) else if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
-    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:5173
-) else (
-    start http://localhost:5173
-)
-
-exit /b 0
+echo.
+pause

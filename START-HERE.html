@@ -14,6 +14,7 @@
       --border: #eeded2;
       --accent: #d97706;
       --success: #059669;
+      --warning: #b45309;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -79,6 +80,15 @@
       border-radius: 6px;
       text-transform: uppercase;
       margin-right: 6px;
+    }
+    .warning-box {
+      background: #fffbeb;
+      border-left: 4px solid var(--accent);
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin: 16px 0;
+      font-size: 14px;
+      color: #92400e;
     }
     table {
       width: 100%;
@@ -163,14 +173,14 @@
   
   <div class="step-card">
     <h3><span class="badge">Step 1</span> Install Node.js (Only required once)</h3>
-    <p>Download and run the free official Node.js installer (LTS version):</p>
+    <p>Before running the POS, your Windows laptop must have Node.js installed:</p>
     <a class="btn-link" href="https://nodejs.org" target="_blank">🌐 Download Node.js from nodejs.org</a>
-    <p style="font-size: 13px; color: #887a6c; margin-top: 6px;">Click <b>Next ➔ Next ➔ Finish</b> through the installer.</p>
+    <p style="font-size: 13px; color: #887a6c; margin-top: 6px;">Click the big green button <b>"LTS (Recommended)"</b>, download it, and click <b>Next ➔ Next ➔ Finish</b>.</p>
   </div>
 
   <div class="step-card">
     <h3><span class="badge">Step 2</span> Extract the ZIP File</h3>
-    <p>Right-click the <code>HouseOfSadaya-POS.zip</code> file and choose <b>Extract All...</b> to your Desktop or C: Drive.</p>
+    <p>Right-click the <code>HouseOfSadaya-POS.zip</code> file and choose <b>Extract All...</b> to your Desktop.</p>
   </div>
 
   <div class="step-card">
@@ -180,6 +190,11 @@
       • On first run, it will automatically install required packages in 1–2 minutes.<br>
       • Your browser will automatically open: <b>http://localhost:5173</b>
     </p>
+  </div>
+
+  <div class="warning-box">
+    ⚠️ <b>If Windows displays "Open File - Security Warning (Unknown Publisher)":</b><br>
+    Windows shows this for any script downloaded from WhatsApp/Drive/email. Simply <b>uncheck</b> <i>"Always ask before opening this file"</i>, and click <b>Run</b>. It is 100% safe.
   </div>
 
   <div class="tip-box">
@@ -253,7 +268,7 @@
   </div>
 
   <h2>🌙 Closing the Day</h2>
-  <p>At store closing time, go to <b>Reports ➔ Z-Report</b> to verify cash in drawer and daily sales, then double-click <b><code>STOP-POS.bat</code></b> to turn off background services.</p>
+  <p>At store closing time, go to <b>Reports ➔ Z-Report</b> to verify cash in drawer and daily sales, then double-click <b><code>STOP-POS.bat</code></b> or close the terminal window to turn off background services.</p>
 </div>
 
 </body>
