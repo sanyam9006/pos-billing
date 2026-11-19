@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>House of Sadaya — Windows Setup & POS User Manual</title>
+  <style>
+    :root {
+      --primary: #8b5cf6;
+      --primary-dark: #6d28d9;
+      --bg: #fcfbf9;
+      --card-bg: #ffffff;
+      --text: #2d2a26;
+      --text-muted: #736b63;
+      --border: #eeded2;
+      --accent: #d97706;
+      --success: #059669;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 30px 20px;
+    }
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 40px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      border: 1px solid var(--border);
+    }
+    .header {
+      text-align: center;
+      border-bottom: 2px dashed var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+    .header h1 {
+      font-size: 32px;
+      color: #3b2d20;
+      margin-bottom: 6px;
+    }
+    .header p {
+      color: var(--text-muted);
+      font-size: 16px;
+      font-weight: 500;
+    }
+    h2 {
+      font-size: 22px;
+      color: #3b2d20;
+      margin-top: 32px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .step-card {
+      background: #faf6f0;
+      border-left: 4px solid var(--primary);
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .step-card h3 {
+      font-size: 17px;
+      color: #2b1f14;
+      margin-bottom: 6px;
+    }
+    .badge {
+      display: inline-block;
+      background: #e0e7ff;
+      color: #3730a3;
+      font-weight: 700;
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      margin-right: 6px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 12px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      background: #f5ece2;
+      color: #4a3828;
+      font-weight: 700;
+    }
+    tr:hover { background: #faf8f5; }
+    code {
+      background: #eee3d5;
+      color: #633c16;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .btn-link {
+      display: inline-block;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    .btn-link:hover {
+      background: var(--primary-dark);
+    }
+    .tip-box {
+      background: #ecfdf5;
+      border-left: 4px solid var(--success);
+      padding: 14px 18px;
+      border-radius: 8px;
+      margin: 20px 0;
+      font-size: 14px;
+      color: #065f46;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .feature-item {
+      border: 1px solid var(--border);
+      padding: 16px;
+      border-radius: 10px;
+      background: #fff;
+    }
+    .feature-item h4 {
+      margin-bottom: 6px;
+      color: #3b2d20;
+    }
+    .feature-item p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>👗 House of Sadaya</h1>
+    <p>Boutique Point of Sale & Inventory Management — Windows User Guide</p>
+  </div>
+
+  <h2>🚀 Quick 3-Step Setup for Windows Laptop</h2>
+  
+  <div class="step-card">
+    <h3><span class="badge">Step 1</span> Install Node.js (Only required once)</h3>
+    <p>Download and run the free official Node.js installer (LTS version):</p>
+    <a class="btn-link" href="https://nodejs.org" target="_blank">🌐 Download Node.js from nodejs.org</a>
+    <p style="font-size: 13px; color: #887a6c; margin-top: 6px;">Click <b>Next ➔ Next ➔ Finish</b> through the installer.</p>
+  </div>
+
+  <div class="step-card">
+    <h3><span class="badge">Step 2</span> Extract the ZIP File</h3>
+    <p>Right-click the <code>HouseOfSadaya-POS.zip</code> file and choose <b>Extract All...</b> to your Desktop or C: Drive.</p>
+  </div>
+
+  <div class="step-card">
+    <h3><span class="badge">Step 3</span> Double-Click <code>START-POS.bat</code></h3>
+    <p>Inside the extracted folder, double-click <b><code>START-POS.bat</code></b>.</p>
+    <p style="font-size: 13px; color: #887a6c; margin-top: 4px;">
+      • On first run, it will automatically install required packages in 1–2 minutes.<br>
+      • Your browser will automatically open: <b>http://localhost:5173</b>
+    </p>
+  </div>
+
+  <div class="tip-box">
+    💡 <b>Tip for Everyday Convenience:</b> Right-click <b><code>START-POS.bat</code></b> ➔ <b>Send to</b> ➔ <b>Desktop (create shortcut)</b>. Every morning, just double-click that desktop icon to open your store POS!
+  </div>
+
+  <h2>🔐 Staff Login Passwords</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Role</th>
+        <th>Employee Code</th>
+        <th>PIN</th>
+        <th>Permissions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>👑 Boutique Owner</b></td>
+        <td><code>OWNER01</code></td>
+        <td><code>9999</code></td>
+        <td>Full access to Settings, Staff Management, Discounts, Analytics & P&L</td>
+      </tr>
+      <tr>
+        <td><b>👑 Supervisor / Manager</b></td>
+        <td><code>EMP003</code></td>
+        <td><code>9999</code></td>
+        <td>Supervisor overrides, discount approvals, rental deposit overrides</td>
+      </tr>
+      <tr>
+        <td><b>💼 Senior Cashier</b></td>
+        <td><code>EMP001</code></td>
+        <td><code>1234</code></td>
+        <td>Daily billing, barcode scanning, checkout, returns, rentals</td>
+      </tr>
+      <tr>
+        <td><b>💼 Cashier</b></td>
+        <td><code>EMP002</code></td>
+        <td><code>5678</code></td>
+        <td>Daily billing, barcode scanning, checkout, returns, rentals</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>🛍️ Store Modules & Operations</h2>
+  <div class="feature-grid">
+    <div class="feature-item">
+      <h4>🧾 1. Billing & Scanning</h4>
+      <p>Plug in any USB barcode scanner. Scan tags directly into the search box. Accept Cash, UPI, or Card.</p>
+    </div>
+    <div class="feature-item">
+      <h4>⚡ 2. 1-Click Matrix Variants</h4>
+      <p>Generate S, M, L, XL sizes in multiple colors in 1 click with guaranteed collision-free unique EAN-13 barcodes.</p>
+    </div>
+    <div class="feature-item">
+      <h4>🏷️ 3. Real Barcode Tags</h4>
+      <p>Print scannable price tags for 50x25mm and 38x25mm rolls, or standard A4 sheets with store name and MRP.</p>
+    </div>
+    <div class="feature-item">
+      <h4>💎 4. Garment Rentals</h4>
+      <p>Track bridal lehengas and occasion sarees on rent. Collect security deposits and compute late return fees.</p>
+    </div>
+    <div class="feature-item">
+      <h4>🪡 5. Tailoring Orders</h4>
+      <p>Record blouse/suit measurements, trial dates, fabric delivery dates, and advance tailoring payments.</p>
+    </div>
+    <div class="feature-item">
+      <h4>📊 6. Reports & Analytics</h4>
+      <p>View daily X/Z-Reports, hourly rush trends, profit margins, and itemized sales timestamps.</p>
+    </div>
+  </div>
+
+  <h2>🌙 Closing the Day</h2>
+  <p>At store closing time, go to <b>Reports ➔ Z-Report</b> to verify cash in drawer and daily sales, then double-click <b><code>STOP-POS.bat</code></b> to turn off background services.</p>
+</div>
+
+</body>
+</html>
