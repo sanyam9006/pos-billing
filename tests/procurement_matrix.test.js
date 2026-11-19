@@ -13,10 +13,16 @@ describe('Procurement & Batch Matrix Variants', () => {
   let testProductId;
 
   beforeAll(async () => {
-    // Get supervisor token
-    const supRes = await request(app)
+    // Get supervisor token (OWNER01 / 9999 or EMP003 / 9999)
+    let supRes = await request(app)
       .post('/api/auth/login')
-      .send({ employee_code: 'EMP003', pin: '9999' });
+      .send({ employee_code: 'OWNER01', pin: '9999' });
+
+    if (!supRes.body.token) {
+      supRes = await request(app)
+        .post('/api/auth/login')
+        .send({ employee_code: 'EMP003', pin: '9999' });
+    }
     supervisorToken = supRes.body.token;
 
     // Get cashier token

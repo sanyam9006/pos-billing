@@ -54,6 +54,7 @@ const insertCashier = db.prepare('INSERT INTO cashiers (name, employee_code, pin
 insertCashier.run('Meenakshi Rathore', 'OWNER01', hashPin('9999'), 'supervisor');
 insertCashier.run('Simran Kaur', 'EMP001', hashPin('1234'), 'cashier');
 insertCashier.run('Pooja Verma', 'EMP002', hashPin('5678'), 'cashier');
+insertCashier.run('Amit Kumar', 'EMP003', hashPin('9999'), 'supervisor');
 
 // ── Customers ──
 const insertCustomer = db.prepare('INSERT INTO customers (name, phone, email, loyalty_points, membership_tier) VALUES (?, ?, ?, ?, ?)');
@@ -126,7 +127,7 @@ insertCustom.run(
   'Ananya Sharma',
   '9876543210',
   'Custom Blouse & Lehenga Stitching',
-  'in_stitching',
+  'in_progress',
   'Pure Raw Silk (Customer provided)',
   '2026-11-20',
   '2026-11-25',
@@ -211,6 +212,5 @@ insertRentalItem.run(
 
 console.log('✅ Boutique database seeded successfully with Indian apparel catalog & rental items!');
 console.log('   • 15 Garment items & variants (Kurtis, Sarees, Co-ords, Dupattas)');
-console.log('   • Correct apparel HSNs (6204, 5208, 5407, 6214) with 5% & 18% slabs');
 console.log('   • 5 Customers, 3 Coupons, 2 Suppliers, 2 Tailoring Orders, 1 Credit Note');
-console.log('   • Staff: OWNER01 (PIN: 9999, Owner), EMP001 (PIN: 1234), EMP002 (PIN: 5678)');
+console.log('   • Staff: OWNER01 (PIN: 9999, Owner), EMP001 (PIN: 1234), EMP002 (PIN: 5678), EMP003 (PIN: 9999)');
