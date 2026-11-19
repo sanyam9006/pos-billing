@@ -6,7 +6,7 @@
 ## 🚀 Part 1: First-Time Setup on Windows (Takes 3 Minutes)
 
 ### Step 1: Install Node.js (Prerequisite — Only required once)
-Before running the POS, Windows needs the Node.js runtime:
+Before running the POS, your Windows laptop needs the free Node.js runtime:
 1. Download Node.js from the official site:
    👉 **https://nodejs.org** *(Click the big green button: **LTS - Recommended for most users**)*.
 2. Run the downloaded installer (`node-v20...msi`).
@@ -24,15 +24,17 @@ Before running the POS, Windows needs the Node.js runtime:
 1. Open the extracted folder and double-click **`START-POS.bat`**.
 
 #### ⚠️ If Windows shows the "Open File - Security Warning" dialog:
-- Windows shows this for any downloaded script.
+- Windows shows this for any script downloaded from WhatsApp/Drive/email.
 - **Uncheck** *"Always ask before opening this file"*.
 - Click **Run**.
 *(Alternative: Right-click `START-POS.bat` ➔ **Properties** ➔ Check **"Unblock"** at the bottom ➔ Click **OK**).*
 
-2. A blue console window will appear:
-   - On the **very first run**, it will automatically download necessary libraries (takes about 1–2 minutes).
+2. A blue console window will appear and start the boutique engine:
+   - On the **very first run**, it will install the required store packages (takes about 30 seconds).
    - Once ready, it automatically opens your web browser to:
      👉 **http://localhost:5173**
+
+> ⚠️ **IMPORTANT RULE:** Keep the blue/black **`START-POS.bat`** window open in the background! If you close that window, the store browser will say *"refused to connect"*. At night when closing the store, simply close that window to shut it down.
 
 > 💡 **Everyday Convenience:** Right-click **`START-POS.bat`** ➔ **Send to** ➔ **Desktop (create shortcut)**. Every morning, just double-click that desktop icon to start your store POS!
 
@@ -100,4 +102,4 @@ Before running the POS, Windows needs the Node.js runtime:
   - **Profit & Margin**: View gross margin %, revenue vs. garment cost, and highest grossing categories.
 
 ### 7. Stopping the System at Night
-- To safely shut down background services at closing time, simply double-click **`STOP-POS.bat`** or close the terminal window.
+- To stop the system, simply close the **`START-POS.bat`** terminal window or double-click **`STOP-POS.bat`**.

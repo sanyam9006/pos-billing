@@ -1,8 +1,7 @@
 @echo off
-title House of Sadaya - POS Launcher
+title House of Sadaya POS
 color 0b
 
-:: Navigate to folder containing this script
 cd /d "%~dp0"
 
 echo ================================================================
@@ -12,38 +11,32 @@ echo.
 
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [!] Node.js is NOT installed on this laptop!
+    echo [ERROR] Node.js is NOT installed on this computer!
     echo.
     echo Opening https://nodejs.org in your browser right now...
     start https://nodejs.org
-    echo.
     echo Please install Node.js (LTS), then restart this file.
-    echo ================================================================
     pause
     exit /b 1
 )
 
 if not exist "node_modules\" (
-    echo [First-Time Setup] Installing server dependencies...
-    call npm install
+    echo Installing required boutique packages...
+    call npm install --omit=dev
 )
 
-if not exist "client\node_modules\" (
-    echo [First-Time Setup] Installing client dependencies...
-    cd client
-    call npm install
-    cd ..
-)
+echo Starting House of Sadaya Boutique POS...
+set PORT=5173
 
-echo Starting POS Server...
-start "House of Sadaya POS Engine" cmd /k "npm run dev"
-
-timeout /t 5 >nul 2>&1
-start http://localhost:5173
+start "" cmd /c "timeout /t 2 >nul & start http://localhost:5173"
 
 echo.
 echo ================================================================
 echo   POS SYSTEM IS READY at http://localhost:5173
+echo   (Keep this window open while using the POS)
 echo ================================================================
 echo.
+
+node server/index.js
+
 pause

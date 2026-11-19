@@ -14,7 +14,7 @@
       --border: #eeded2;
       --accent: #d97706;
       --success: #059669;
-      --warning: #b45309;
+      --danger: #dc2626;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -81,14 +81,14 @@
       text-transform: uppercase;
       margin-right: 6px;
     }
-    .warning-box {
-      background: #fffbeb;
-      border-left: 4px solid var(--accent);
+    .alert-box {
+      background: #fef2f2;
+      border-left: 4px solid var(--danger);
       padding: 14px 18px;
       border-radius: 8px;
-      margin: 16px 0;
+      margin: 20px 0;
       font-size: 14px;
-      color: #92400e;
+      color: #991b1b;
     }
     table {
       width: 100%;
@@ -187,14 +187,14 @@
     <h3><span class="badge">Step 3</span> Double-Click <code>START-POS.bat</code></h3>
     <p>Inside the extracted folder, double-click <b><code>START-POS.bat</code></b>.</p>
     <p style="font-size: 13px; color: #887a6c; margin-top: 4px;">
-      • On first run, it will automatically install required packages in 1–2 minutes.<br>
+      • On first run, it will install required packages in ~30 seconds.<br>
       • Your browser will automatically open: <b>http://localhost:5173</b>
     </p>
   </div>
 
-  <div class="warning-box">
-    ⚠️ <b>If Windows displays "Open File - Security Warning (Unknown Publisher)":</b><br>
-    Windows shows this for any script downloaded from WhatsApp/Drive/email. Simply <b>uncheck</b> <i>"Always ask before opening this file"</i>, and click <b>Run</b>. It is 100% safe.
+  <div class="alert-box">
+    ⚠️ <b>If browser says "localhost refused to connect":</b><br>
+    This simply means the <code>START-POS.bat</code> window was closed or not running! <b>Keep the blue/black START-POS window open in the background</b> while using the system.
   </div>
 
   <div class="tip-box">
@@ -268,7 +268,7 @@
   </div>
 
   <h2>🌙 Closing the Day</h2>
-  <p>At store closing time, go to <b>Reports ➔ Z-Report</b> to verify cash in drawer and daily sales, then double-click <b><code>STOP-POS.bat</code></b> or close the terminal window to turn off background services.</p>
+  <p>At store closing time, go to <b>Reports ➔ Z-Report</b> to verify cash in drawer and daily sales, then simply close the <b><code>START-POS.bat</code></b> terminal window to turn off the server.</p>
 </div>
 
 </body>
