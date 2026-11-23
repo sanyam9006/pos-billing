@@ -24,7 +24,7 @@ node -v
 
 echo.
 echo [2/3] Installing boutique packages...
-call npm install --omit=dev
+call npm install
 
 echo.
 echo [3/3] Starting House of Sadaya Boutique POS...
